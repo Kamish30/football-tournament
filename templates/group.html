@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Группа — Турнир-менеджер</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="header">
+    <a href="/" class="header-logo">⚽ <span>Турнир-менеджер</span></a>
+    <div class="header-actions" id="auth-area"></div>
+  </div>
+
+  <div class="container">
+    <!-- Title bar -->
+    <div class="flex items-center gap-12 mb-16 flex-wrap">
+      <a href="/" class="btn btn-ghost btn-sm" style="text-decoration:none">← Назад</a>
+      <div style="flex:1">
+        <h2 id="group-title" style="font-size:20px;font-weight:800;margin:0"></h2>
+        <span id="group-subtitle" class="text-sm text-muted"></span>
+      </div>
+      <div id="admin-btns" class="hidden flex gap-8">
+        <button class="btn btn-primary btn-sm" onclick="togglePanel('teams')">Команды</button>
+        <button class="btn btn-primary btn-sm" onclick="togglePanel('players')">Игроки</button>
+      </div>
+    </div>
+
+    <!-- Admin panels -->
+    <div id="panel-teams" class="card hidden" style="border-color:var(--pitch)">
+      <h3 class="font-bold mb-8">Команды</h3>
+      <div class="form-row">
+        <input class="input" id="t-name" placeholder="Название" style="max-width:180px">
+        <input class="input" id="t-short" placeholder="Кратко" style="max-width:80px">
+        <button class="btn btn-primary btn-sm" onclick="addTeam()">+ Команда</button>
+      </div>
+      <div id="teams-list"></div>
+    </div>
+    <div id="panel-players" class="card hidden" style="border-color:var(--pitch)">
+      <h3 class="font-bold mb-8">Игроки</h3>
+      <div class="form-row">
+        <select class="input" id="p-team" style="max-width:180px"><option value="">Команда...</option></select>
+        <input class="input" id="p-name" placeholder="ФИО" style="max-width:160px">
+        <input class="input" id="p-num" type="number" placeholder="№" style="max-width:60px">
+        <button class="btn btn-primary btn-sm" onclick="addPlayer()">+ Игрок</button>
+      </div>
+      <div id="players-list"></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="schedule">Расписание</button>
+      <button class="tab" data-tab="standings">Таблица</button>
+      <button class="tab" data-tab="crosstable">Шахматка</button>
+      <button class="tab" data-tab="gk">🧤 Вратари</button>
+      <button class="tab" data-tab="scorers">⚽ Бомбардиры</button>
+      <button class="tab" data-tab="assists">👟 Ассисты</button>
+    </div>
+
+    <!-- Tab content -->
+    <div id="tab-schedule"></div>
+    <div id="tab-standings" class="hidden"></div>
+    <div id="tab-crosstable" class="hidden"></div>
+    <div id="tab-gk" class="hidden"></div>
+    <div id="tab-scorers" class="hidden"></div>
+    <div id="tab-assists" class="hidden"></div>
+  </div>
+
+  <!-- Match modal -->
+  <div id="match-modal" class="modal-overlay hidden" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="modal-title">Матч</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>
+    const GROUP_ID = {{ group_id }};
+    let teams = [], players = [], matches = [], currentTab = "schedule";
+
+    /* ── Data loading ── */
+    async function loadAll() {
+      const [g, t, p, m] = await Promise.all([
+        API.get("/api/groups"),
+        API.get(`/api/teams?group_id=${GROUP_ID}`),
+        API.get(`/api/players?group_id=${GROUP_ID}`),
+        API.get(`/api/matches?group_id=${GROUP_ID}`),
+      ]);
+      const group = (g || []).find(x => x.id === GROUP_ID);
+      if (group) {
+        document.getElementById("group-title").textContent = group.name;
+        document.getElementById("group-subtitle").textContent = group.birth_year + " г.р.";
+        document.title = group.name + " — Турнир-менеджер";
+      }
+      teams = t || []; players = p || []; matches = m || [];
+      renderTeamsList();
+      renderPlayersList();
+      renderTab();
+    }
+
+    /* ── Tabs ── */
+    document.getElementById("tabs").addEventListener("click", e => {
+      if (!e.target.classList.contains("tab")) return;
+      currentTab = e.target.dataset.tab;
+      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === currentTab));
+      ["schedule","standings","crosstable","gk","scorers","assists"].forEach(k => {
+        document.getElementById("tab-" + k).classList.toggle("hidden", k !== currentTab);
+      });
+      renderTab();
+    });
+
+    async function renderTab() {
+      if (currentTab === "schedule") renderSchedule();
+      else if (currentTab === "standings") renderStandings();
+      else if (currentTab === "crosstable") renderCrossTable();
+      else if (currentTab === "gk") renderGk();
+      else if (currentTab === "scorers") renderLeaderboard("goal");
+      else if (currentTab === "assists") renderLeaderboard("assist");
+    }
+
+    /* ── Schedule ── */
+    function renderSchedule() {
+      const el = document.getElementById("tab-schedule");
+      const isEditor = API.isLoggedIn();
+
+      let html = `<div class="flex items-center justify-between mb-16">
+        <span class="text-muted">${matches.length} матчей</span>
+        ${isEditor ? '<button class="btn btn-primary btn-sm" onclick="showNewMatch()">+ Новый матч</button>' : ''}
+      </div>`;
+      html += '<div id="new-match-form" class="hidden"></div>';
+
+      // Group by date+venue
+      const grouped = {};
+      matches.forEach(m => {
+        const key = m.match_date ? m.match_date.split("T")[0] + (m.venue ? " · " + m.venue : "") : "Без даты";
+        (grouped[key] = grouped[key] || []).push(m);
+      });
+
+      if (matches.length === 0) {
+        html += '<div class="empty">Нет матчей. ' + (isEditor ? 'Создайте первый.' : '') + '</div>';
+      } else {
+        for (const [key, ms] of Object.entries(grouped)) {
+          html += `<div class="date-header">${escHtml(key)}</div>`;
+          ms.forEach(m => {
+            const isPlayed = m.status === "played";
+            html += `<div class="match-card" onclick="openMatch(${m.id})">
+              <span class="badge badge-pitch">Круг ${m.round}</span>
+              <div class="match-teams">
+                <span class="match-team">${escHtml(m.team_a_name)}</span>
+                ${isPlayed
+                  ? `<span class="match-score">${m.score_a} : ${m.score_b}</span>`
+                  : '<span class="match-vs">vs</span>'}
+                <span class="match-team">${escHtml(m.team_b_name)}</span>
+              </div>
+              ${statusBadge(m.status)}
+              ${isEditor ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();delMatch(${m.id})" style="color:var(--muted);border:none">🗑</button>` : ''}
+            </div>`;
+          });
+        }
+      }
+      el.innerHTML = html;
+    }
+
+    function showNewMatch() {
+      const el = document.getElementById("new-match-form");
+      if (!el.classList.contains("hidden")) { el.classList.add("hidden"); return; }
+      el.classList.remove("hidden");
+      el.innerHTML = `<div class="card" style="background:var(--pitch-light)">
+        <div class="form-row">
+          <div class="form-group"><label>Команда A</label>
+            <select class="input" id="nm-a" style="width:160px"><option value="">—</option>${teams.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join("")}</select></div>
+          <div class="form-group"><label>Команда B</label>
+            <select class="input" id="nm-b" style="width:160px"><option value="">—</option>${teams.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join("")}</select></div>
+          <div class="form-group"><label>Круг</label>
+            <select class="input" id="nm-round" style="width:70px"><option>1</option><option>2</option><option>3</option></select></div>
+          <div class="form-group"><label>Дата</label>
+            <input type="datetime-local" class="input" id="nm-date" style="width:180px"></div>
+          <div class="form-group"><label>Площадка</label>
+            <input class="input" id="nm-venue" placeholder="Поле №1" style="width:120px"></div>
+          <div class="form-group" style="justify-content:flex-end">
+            <button class="btn btn-primary" onclick="createMatch()">Создать</button></div>
+        </div>
+      </div>`;
+    }
+
+    async function createMatch() {
+      const a = document.getElementById("nm-a").value;
+      const b = document.getElementById("nm-b").value;
+      if (!a || !b || a === b) return showToast("Выберите две разные команды", true);
+      try {
+        await API.post("/api/matches", {
+          group_id: GROUP_ID, round: parseInt(document.getElementById("nm-round").value),
+          team_a_id: parseInt(a), team_b_id: parseInt(b),
+          match_date: document.getElementById("nm-date").value || null,
+          venue: document.getElementById("nm-venue").value,
+        });
+        showToast("Матч создан"); loadAll();
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    async function delMatch(id) {
+      if (!confirm("Удалить матч?")) return;
+      try { await API.del(`/api/matches/${id}`); showToast("Удалено"); loadAll(); }
+      catch (e) { showToast(e.message, true); }
+    }
+
+    /* ── Match Modal ── */
+    let currentMatch = null;
+    let modalEvents = [];
+
+    function openMatch(id) {
+      currentMatch = matches.find(m => m.id === id);
+      if (!currentMatch) return;
+      const m = currentMatch;
+      modalEvents = [...(m.events || [])];
+      const isEditor = API.isLoggedIn();
+      document.getElementById("modal-title").textContent = `${m.team_a_name} vs ${m.team_b_name}`;
+
+      const playersA = players.filter(p => p.team_id === m.team_a_id);
+      const playersB = players.filter(p => p.team_id === m.team_b_id);
+      const allP = [...playersA, ...playersB];
+
+      let html = "";
+      if (isEditor) {
+        html += `<div class="form-row">
+          <div class="form-group" style="flex:1;min-width:120px"><label>Статус</label>
+            <select class="input" id="m-status">
+              <option value="scheduled" ${m.status==='scheduled'?'selected':''}>Запланирован</option>
+              <option value="played" ${m.status==='played'?'selected':''}>Сыгран</option>
+              <option value="postponed" ${m.status==='postponed'?'selected':''}>Перенесён</option>
+              <option value="cancelled" ${m.status==='cancelled'?'selected':''}>Отменён</option>
+            </select></div>
+          <div class="form-group" style="flex:1;min-width:140px"><label>Дата/время</label>
+            <input type="datetime-local" class="input" id="m-date" value="${m.match_date ? m.match_date.slice(0,16) : ''}"></div>
+          <div class="form-group" style="flex:1;min-width:120px"><label>Площадка</label>
+            <input class="input" id="m-venue" value="${escHtml(m.venue)}"></div>
+        </div>`;
+
+        html += `<div class="score-block">
+          <div class="score-team"><div class="score-team-name">${escHtml(m.team_a_name)}</div>
+            <input type="number" min="0" class="input input-score" id="m-sa" value="${m.score_a}"></div>
+          <div class="score-sep">:</div>
+          <div class="score-team"><div class="score-team-name">${escHtml(m.team_b_name)}</div>
+            <input type="number" min="0" class="input input-score" id="m-sb" value="${m.score_b}"></div>
+        </div>`;
+
+        html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+          <div class="form-group"><label>Автоголы ${escHtml(m.team_a_short)}</label><input type="number" min="0" class="input" id="m-oga" value="${m.own_goals_a}"></div>
+          <div class="form-group"><label>Автоголы ${escHtml(m.team_b_short)}</label><input type="number" min="0" class="input" id="m-ogb" value="${m.own_goals_b}"></div>
+          <div class="form-group"><label>Батл вратарей ${escHtml(m.team_a_short)}</label>
+            <select class="input" id="m-gka"><option value="0" ${m.gk_pts_a===0?'selected':''}>0</option><option value="1" ${m.gk_pts_a===1?'selected':''}>1</option><option value="2" ${m.gk_pts_a===2?'selected':''}>2</option></select></div>
+          <div class="form-group"><label>Батл вратарей ${escHtml(m.team_b_short)}</label>
+            <select class="input" id="m-gkb"><option value="0" ${m.gk_pts_b===0?'selected':''}>0</option><option value="1" ${m.gk_pts_b===1?'selected':''}>1</option><option value="2" ${m.gk_pts_b===2?'selected':''}>2</option></select></div>
+        </div>`;
+
+        // Events
+        html += `<div class="mb-16"><label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">События (голы, ассисты)</label>
+          <div class="form-row" style="margin-top:6px">
+            <select class="input" id="ev-player" style="max-width:180px"><option value="">Игрок...</option>
+              <optgroup label="${escHtml(m.team_a_name)}">${playersA.map(p => `<option value="${p.id}">${p.number ? '#'+p.number+' ' : ''}${escHtml(p.full_name)}</option>`).join("")}</optgroup>
+              <optgroup label="${escHtml(m.team_b_name)}">${playersB.map(p => `<option value="${p.id}">${p.number ? '#'+p.number+' ' : ''}${escHtml(p.full_name)}</option>`).join("")}</optgroup>
+            </select>
+            <select class="input" id="ev-type" style="max-width:100px"><option value="goal">⚽ Гол</option><option value="assist">👟 Ассист</option></select>
+            <input type="number" min="1" max="120" placeholder="мин" class="input" id="ev-min" style="max-width:60px">
+            <button class="btn btn-primary btn-sm" onclick="addEvent()">+</button>
+          </div>
+          <div id="events-list"></div>
+        </div>`;
+
+        html += `<div class="flex gap-8" style="justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="closeModal()">Отмена</button>
+          <button class="btn btn-primary" onclick="saveMatch()">Сохранить</button>
+        </div>`;
+      } else {
+        // Viewer mode
+        html += `<div class="flex items-center justify-between mb-8">
+          ${statusBadge(m.status)}
+          <span class="text-sm text-muted">${m.match_date ? new Date(m.match_date).toLocaleString("ru") : "Дата не указана"}${m.venue ? ' · ' + escHtml(m.venue) : ''}</span>
+        </div>`;
+        html += `<div class="score-block">
+          <div class="score-team"><div class="score-team-name">${escHtml(m.team_a_name)}</div>
+            <div style="font-size:28px;font-weight:800">${m.score_a}</div></div>
+          <div class="score-sep">:</div>
+          <div class="score-team"><div class="score-team-name">${escHtml(m.team_b_name)}</div>
+            <div style="font-size:28px;font-weight:800">${m.score_b}</div></div>
+        </div>`;
+        if (m.gk_pts_a || m.gk_pts_b) {
+          html += `<div class="text-sm text-muted" style="text-align:center;margin-bottom:12px">Батл вратарей: ${m.gk_pts_a} : ${m.gk_pts_b}</div>`;
+        }
+        if (m.events && m.events.length) {
+          html += `<div style="margin-top:8px">${m.events.map(e => `<div style="padding:4px 0;font-size:13px">${e.type==='goal'?'⚽':'👟'} ${escHtml(e.player_name)} ${e.minute ? '('+e.minute+"')" : ''}</div>`).join("")}</div>`;
+        }
+      }
+
+      document.getElementById("modal-body").innerHTML = html;
+      if (isEditor) renderEvents();
+      document.getElementById("match-modal").classList.remove("hidden");
+    }
+
+    function renderEvents() {
+      const el = document.getElementById("events-list");
+      if (!el) return;
+      const allP = players;
+      el.innerHTML = modalEvents.length === 0 ? '<div class="text-sm text-muted" style="margin-top:4px">Нет событий</div>' :
+        modalEvents.map((e, i) => {
+          const p = allP.find(x => x.id === e.player_id);
+          return `<div class="flex items-center justify-between" style="padding:4px 8px;border-bottom:1px solid var(--border);font-size:13px">
+            <span>${e.type==='goal'?'⚽':'👟'} ${escHtml(p?.full_name || e.player_name || '?')} ${e.minute ? '('+e.minute+"')" : ''}</span>
+            <button onclick="removeEvent(${i})" style="background:none;border:none;cursor:pointer;color:var(--muted)">✕</button>
+          </div>`;
+        }).join("");
+    }
+
+    function addEvent() {
+      const pid = document.getElementById("ev-player").value;
+      if (!pid) return;
+      modalEvents.push({
+        player_id: parseInt(pid),
+        type: document.getElementById("ev-type").value,
+        minute: document.getElementById("ev-min").value ? parseInt(document.getElementById("ev-min").value) : null,
+      });
+      document.getElementById("ev-player").value = "";
+      document.getElementById("ev-min").value = "";
+      renderEvents();
+    }
+
+    function removeEvent(idx) { modalEvents.splice(idx, 1); renderEvents(); }
+
+    async function saveMatch() {
+      if (!currentMatch) return;
+      try {
+        await API.put(`/api/matches/${currentMatch.id}`, {
+          score_a: parseInt(document.getElementById("m-sa").value),
+          score_b: parseInt(document.getElementById("m-sb").value),
+          own_goals_a: parseInt(document.getElementById("m-oga").value),
+          own_goals_b: parseInt(document.getElementById("m-ogb").value),
+          gk_pts_a: parseInt(document.getElementById("m-gka").value),
+          gk_pts_b: parseInt(document.getElementById("m-gkb").value),
+          status: document.getElementById("m-status").value,
+          venue: document.getElementById("m-venue").value,
+          match_date: document.getElementById("m-date").value || null,
+          version: currentMatch.version,
+          events: modalEvents.map(e => ({ player_id: e.player_id, type: e.type, minute: e.minute })),
+        });
+        showToast("Сохранено"); closeModal(); loadAll();
+      } catch (e) {
+        if (e.message !== "conflict") showToast(e.message, true);
+      }
+    }
+
+    function closeModal() { document.getElementById("match-modal").classList.add("hidden"); currentMatch = null; }
+
+    /* ── Standings ── */
+    async function renderStandings() {
+      const rows = await API.get(`/api/standings?group_id=${GROUP_ID}`);
+      const el = document.getElementById("tab-standings");
+      if (!rows || rows.length === 0) { el.innerHTML = '<div class="empty">Нет данных.</div>'; return; }
+      el.innerHTML = `<div class="overflow-x"><table class="data-table"><thead><tr>
+        <th class="center">#</th><th>Команда</th><th class="center">И</th><th class="center">В</th><th class="center">Н</th><th class="center">П</th><th class="center">ГЗ</th><th class="center">ГП</th><th class="center">РМ</th><th class="center" style="font-weight:800;color:var(--pitch)">О</th>
+      </tr></thead><tbody>${rows.map((r, i) => `<tr class="${i===0?'highlight':''}">
+        <td class="center" style="font-weight:700;color:var(--muted)">${r.position}</td>
+        <td style="font-weight:600">${escHtml(r.team_name)}</td>
+        <td class="center">${r.mp}</td><td class="center">${r.w}</td><td class="center">${r.d}</td><td class="center">${r.l}</td>
+        <td class="center">${r.gf}</td><td class="center">${r.ga}</td>
+        <td class="center" style="font-weight:600;color:${r.gd>0?'var(--pitch)':r.gd<0?'var(--danger)':'var(--muted)'}">${r.gd>0?'+':''}${r.gd}</td>
+        <td class="center" style="font-weight:800;font-size:15px;color:var(--pitch)">${r.pts}</td>
+      </tr>`).join("")}</tbody></table></div>
+      <div class="text-xs text-muted" style="margin-top:8px">И — игры, В — победы, Н — ничьи, П — поражения, ГЗ — забито, ГП — пропущено, РМ — разница, О — очки</div>`;
+    }
+
+    /* ── Cross Table ── */
+    async function renderCrossTable() {
+      const data = await API.get(`/api/crosstable?group_id=${GROUP_ID}`);
+      const el = document.getElementById("tab-crosstable");
+      if (!data || data.teams.length === 0) { el.innerHTML = '<div class="empty">Нет данных.</div>'; return; }
+      const { teams: ct, matrix } = data;
+
+      function cellClass(scores) {
+        if (!scores || scores.length === 0) return "";
+        let w=0, l=0;
+        scores.forEach(s => { const [a,b] = s.split(":").map(Number); if(a>b)w++; else if(a<b)l++; });
+        if (w > l) return "cell-win";
+        if (l > w) return "cell-loss";
+        return "cell-draw";
+      }
+
+      let html = `<div class="overflow-x"><table class="cross-table"><thead><tr><th>Команда</th>${ct.map(t => `<th>${escHtml(t.short_name)}</th>`).join("")}</tr></thead><tbody>`;
+      ct.forEach(row => {
+        html += `<tr><td class="team-name">${escHtml(row.name)}</td>`;
+        ct.forEach(col => {
+          if (row.id === col.id) { html += '<td class="self">—</td>'; return; }
+          const scores = matrix[String(row.id)]?.[String(col.id)];
+          html += `<td class="${cellClass(scores)}">${scores ? scores.join(", ") : ""}</td>`;
+        });
+        html += "</tr>";
+      });
+      html += `</tbody></table></div>
+      <div class="text-xs text-muted" style="margin-top:8px">Счёт с точки зрения команды в строке. Зелёный — победа, красный — поражение, жёлтый — ничья.</div>`;
+      el.innerHTML = html;
+    }
+
+    /* ── GK Standings ── */
+    async function renderGk() {
+      const rows = await API.get(`/api/gk-standings?group_id=${GROUP_ID}`);
+      const el = document.getElementById("tab-gk");
+      if (!rows || rows.length === 0) { el.innerHTML = '<div class="empty">Нет данных по баттлам вратарей.</div>'; return; }
+      el.innerHTML = `<div class="overflow-x"><table class="data-table"><thead><tr style="background:var(--accent-light)">
+        <th class="center">#</th><th>Команда</th><th class="center">Баттлов</th><th class="center">В</th><th class="center">Н</th><th class="center">П</th><th class="center" style="font-weight:800;color:var(--accent)">Очки</th>
+      </tr></thead><tbody>${rows.map((r, i) => `<tr${i===0?' class="highlight"':''} style="${i===0?'background:var(--accent-light)':''}">
+        <td class="center" style="font-weight:700;color:var(--muted)">${r.position}</td>
+        <td style="font-weight:600">${escHtml(r.team_name)}</td>
+        <td class="center">${r.battles}</td><td class="center">${r.wins}</td><td class="center">${r.draws}</td><td class="center">${r.losses}</td>
+        <td class="center" style="font-weight:800;font-size:15px;color:var(--accent)">${r.gk_pts}</td>
+      </tr>`).join("")}</tbody></table></div>
+      <div class="text-xs text-muted" style="margin-top:8px">Победа = 2 очка, ничья = 1 очко</div>`;
+    }
+
+    /* ── Leaderboard ── */
+    async function renderLeaderboard(type) {
+      const rows = await API.get(`/api/leaderboard?group_id=${GROUP_ID}&type=${type}`);
+      const el = document.getElementById(type === "goal" ? "tab-scorers" : "tab-assists");
+      if (!rows || rows.length === 0) { el.innerHTML = '<div class="empty">Нет данных.</div>'; return; }
+      el.innerHTML = rows.map((r, i) => `
+        <div class="lb-row ${i===0?'top':''}">
+          <span class="lb-pos ${i<3?'gold':''}">${r.position}</span>
+          <div class="lb-info"><div class="lb-name">${escHtml(r.player_name)}</div>
+            <div class="lb-team">${escHtml(r.team_name)}${r.number != null ? ' · #'+r.number : ''}</div></div>
+          <span class="lb-count ${i===0?'gold':''}">${r.count}</span>
+        </div>
+      `).join("");
+    }
+
+    /* ── Teams management ── */
+    function renderTeamsList() {
+      document.getElementById("teams-list").innerHTML = teams.map(t => `
+        <div class="flex items-center justify-between" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
+          <span><strong>${escHtml(t.name)}</strong> <span class="text-muted">(${escHtml(t.short_name)})</span></span>
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger);border:none" onclick="delTeam(${t.id})">✕</button>
+        </div>
+      `).join("");
+      // Update player team selector
+      const sel = document.getElementById("p-team");
+      if (sel) sel.innerHTML = '<option value="">Команда...</option>' + teams.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join("");
+    }
+
+    async function addTeam() {
+      const name = document.getElementById("t-name").value.trim();
+      const short = document.getElementById("t-short").value.trim() || name.slice(0,3).toUpperCase();
+      if (!name) return;
+      try {
+        await API.post("/api/teams", { group_id: GROUP_ID, name, short_name: short });
+        document.getElementById("t-name").value = "";
+        document.getElementById("t-short").value = "";
+        showToast("Команда добавлена"); loadAll();
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    async function delTeam(id) {
+      try { await API.del(`/api/teams/${id}`); showToast("Удалено"); loadAll(); }
+      catch (e) { showToast(e.message, true); }
+    }
+
+    /* ── Players management ── */
+    function renderPlayersList() {
+      const el = document.getElementById("players-list");
+      el.innerHTML = teams.map(t => {
+        const tp = players.filter(p => p.team_id === t.id);
+        return `<div style="margin-bottom:10px">
+          <div class="text-xs font-bold" style="color:var(--pitch);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">${escHtml(t.name)}</div>
+          ${tp.length === 0 ? '<div class="text-xs text-muted" style="margin-left:8px">Нет игроков</div>' :
+            tp.map(p => `<div class="flex items-center justify-between" style="padding:3px 8px;font-size:13px">
+              <span>${p.number != null ? '<span class="badge badge-pitch" style="margin-right:6px">#'+p.number+'</span>' : ''}${escHtml(p.full_name)}</span>
+              <button onclick="delPlayer(${p.id})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px">✕</button>
+            </div>`).join("")}
+        </div>`;
+      }).join("");
+    }
+
+    async function addPlayer() {
+      const tid = document.getElementById("p-team").value;
+      const name = document.getElementById("p-name").value.trim();
+      const num = document.getElementById("p-num").value;
+      if (!tid || !name) return;
+      try {
+        await API.post("/api/players", { team_id: parseInt(tid), full_name: name, number: num ? parseInt(num) : null });
+        document.getElementById("p-name").value = "";
+        document.getElementById("p-num").value = "";
+        showToast("Игрок добавлен"); loadAll();
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    async function delPlayer(id) {
+      try { await API.del(`/api/players/${id}`); loadAll(); }
+      catch (e) { showToast(e.message, true); }
+    }
+
+    function togglePanel(name) {
+      const el = document.getElementById("panel-" + name);
+      el.classList.toggle("hidden");
+    }
+
+    /* ── Init ── */
+    updateAuthUI();
+    if (API.isLoggedIn()) document.getElementById("admin-btns").classList.remove("hidden");
+    loadAll();
+  </script>
+</body>
+</html>

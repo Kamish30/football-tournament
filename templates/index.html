@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Турнир-менеджер</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="header">
+    <a href="/" class="header-logo">⚽ <span>Турнир-менеджер</span></a>
+    <div class="header-actions" id="auth-area"></div>
+  </div>
+
+  <div class="container">
+    <h1 style="font-size:24px;font-weight:800;margin-bottom:4px">Группы турнира</h1>
+    <p class="text-muted mb-16">Выберите группу для просмотра расписания и статистики</p>
+
+    <div id="groups-grid" class="group-grid"></div>
+
+    <!-- Admin: create group -->
+    <div id="admin-panel" class="hidden">
+      <div class="card">
+        <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">Управление группами</h3>
+        <div class="form-row">
+          <input class="input" id="g-name" placeholder="Название группы" style="max-width:200px">
+          <input class="input" id="g-year" type="number" placeholder="Год рожд." style="max-width:120px">
+          <button class="btn btn-primary" onclick="addGroup()">+ Группа</button>
+        </div>
+        <div id="groups-admin-list"></div>
+      </div>
+      <div class="card" id="users-panel" style="display:none">
+        <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">Пользователи</h3>
+        <div class="form-row">
+          <input class="input" id="u-login" placeholder="Логин" style="max-width:140px">
+          <input class="input" id="u-pass" placeholder="Пароль" style="max-width:120px">
+          <input class="input" id="u-name" placeholder="Имя" style="max-width:140px">
+          <button class="btn btn-primary" onclick="addUser()">+ Редактор</button>
+        </div>
+        <div id="users-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>
+    let groups = [];
+
+    async function loadGroups() {
+      groups = await API.get("/api/groups") || [];
+      renderGroups();
+    }
+
+    function renderGroups() {
+      const grid = document.getElementById("groups-grid");
+      if (groups.length === 0) {
+        grid.innerHTML = '<div class="empty">Нет групп. Войдите как редактор, чтобы создать.</div>';
+      } else {
+        grid.innerHTML = groups.map(g => `
+          <a href="/group/${g.id}" class="card card-accent" style="text-decoration:none;color:inherit;transition:transform .1s">
+            <h3 style="font-size:17px;font-weight:800;margin-bottom:4px">${escHtml(g.name)}</h3>
+            <div class="text-sm text-muted mb-8">${g.birth_year} г.р.</div>
+            <div class="flex gap-8">
+              <span class="badge badge-pitch">${g.team_count} команд</span>
+              <span class="badge badge-accent">${g.played_count}/${g.match_count} матчей</span>
+            </div>
+          </a>
+        `).join("");
+      }
+      // Admin list
+      const list = document.getElementById("groups-admin-list");
+      if (list) {
+        list.innerHTML = groups.map(g => `
+          <div class="flex items-center justify-between" style="padding:6px 10px;background:var(--pitch-light);border-radius:6px;margin-bottom:4px">
+            <span><strong>${escHtml(g.name)}</strong> <span class="text-muted text-sm">(${g.birth_year})</span></span>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delGroup(${g.id})">Удалить</button>
+          </div>
+        `).join("");
+      }
+    }
+
+    async function addGroup() {
+      const name = document.getElementById("g-name").value.trim();
+      const year = document.getElementById("g-year").value;
+      if (!name || !year) return showToast("Заполните название и год", true);
+      try {
+        await API.post("/api/groups", { name, birth_year: parseInt(year) });
+        document.getElementById("g-name").value = "";
+        document.getElementById("g-year").value = "";
+        showToast("Группа создана");
+        loadGroups();
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    async function delGroup(id) {
+      if (!confirm("Удалить группу и все данные?")) return;
+      try { await API.del(`/api/groups/${id}`); showToast("Удалено"); loadGroups(); }
+      catch (e) { showToast(e.message, true); }
+    }
+
+    async function loadUsers() {
+      try {
+        const users = await API.get("/api/users");
+        document.getElementById("users-list").innerHTML = (users || []).map(u => `
+          <div class="flex items-center justify-between" style="padding:6px 10px;margin-bottom:4px">
+            <span><strong>${escHtml(u.display_name)}</strong> <span class="text-muted text-sm">(${u.username}, ${u.role})</span></span>
+            ${u.username !== 'admin' ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delUser(${u.id})">✕</button>` : ''}
+          </div>
+        `).join("");
+      } catch {}
+    }
+
+    async function addUser() {
+      const login = document.getElementById("u-login").value.trim();
+      const pass = document.getElementById("u-pass").value;
+      const name = document.getElementById("u-name").value.trim();
+      if (!login || !pass || !name) return showToast("Заполните все поля", true);
+      try {
+        await API.post("/api/users", { username: login, password: pass, display_name: name, role: "editor" });
+        document.getElementById("u-login").value = "";
+        document.getElementById("u-pass").value = "";
+        document.getElementById("u-name").value = "";
+        showToast("Пользователь создан");
+        loadUsers();
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    async function delUser(id) {
+      if (!confirm("Удалить пользователя?")) return;
+      try { await API.del(`/api/users/${id}`); loadUsers(); } catch (e) { showToast(e.message, true); }
+    }
+
+    // Init
+    updateAuthUI();
+    loadGroups();
+    if (API.isLoggedIn()) {
+      document.getElementById("admin-panel").classList.remove("hidden");
+      if (API.user?.role === "admin") {
+        document.getElementById("users-panel").style.display = "block";
+        loadUsers();
+      }
+    }
+  </script>
+</body>
+</html>

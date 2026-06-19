@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход — Турнир-менеджер</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="header">
+    <a href="/" class="header-logo">⚽ <span>Турнир-менеджер</span></a>
+  </div>
+
+  <div class="container">
+    <div class="login-box">
+      <div class="card">
+        <h2 style="margin-bottom:16px;font-size:20px">Вход для редакторов</h2>
+        <div id="error" class="hidden" style="background:var(--danger-bg);color:var(--danger);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px"></div>
+        <div class="form-group mb-16">
+          <label>Логин</label>
+          <input class="input" id="username" autocomplete="username" autofocus>
+        </div>
+        <div class="form-group mb-16">
+          <label>Пароль</label>
+          <input class="input" id="password" type="password" autocomplete="current-password">
+        </div>
+        <button class="btn btn-primary w-full" id="loginBtn" onclick="doLogin()">Войти</button>
+        <p class="text-sm text-muted" style="margin-top:12px;text-align:center">Зрители могут смотреть статистику без входа</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>
+    // If already logged in, redirect
+    if (API.isLoggedIn()) window.location.href = "/";
+
+    document.getElementById("password").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+
+    async function doLogin() {
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+      const errEl = document.getElementById("error");
+      errEl.classList.add("hidden");
+
+      if (!username || !password) {
+        errEl.textContent = "Заполните оба поля";
+        errEl.classList.remove("hidden");
+        return;
+      }
+
+      try {
+        const btn = document.getElementById("loginBtn");
+        btn.disabled = true; btn.textContent = "Вход...";
+        const data = await API.post("/api/login", { username, password });
+        API.login(data.token, { username: data.username, display_name: data.display_name, role: data.role });
+        window.location.href = "/";
+      } catch (e) {
+        errEl.textContent = e.message || "Ошибка входа";
+        errEl.classList.remove("hidden");
+        const btn = document.getElementById("loginBtn");
+        btn.disabled = false; btn.textContent = "Войти";
+      }
+    }
+  </script>
+</body>
+</html>
