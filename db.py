@@ -4,11 +4,15 @@ import os
 from datetime import datetime
 from sqlalchemy import (
     create_engine, Column, Integer, String, DateTime, ForeignKey,
-    CheckConstraint, Index, Text, event
+    CheckConstraint, Index, Text, event, text
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./tournament.db")
+# Use /data/ for Railway Volume, fallback to local file
+DATA_DIR = os.getenv("DATA_DIR", ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "tournament.db")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 # Enable WAL mode for better concurrent reads
@@ -58,8 +62,16 @@ class Team(Base):
     group_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     short_name = Column(String(10), nullable=False)
+    logo = Column(Text, nullable=True)  # base64 data URL
     group = relationship("Group", back_populates="teams")
     players = relationship("Player", back_populates="team", cascade="all, delete-orphan")
+
+
+class CoachTeam(Base):
+    __tablename__ = "coach_teams"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    team_id = Column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
 
 
 class Player(Base):
@@ -102,8 +114,8 @@ class Match(Base):
         CheckConstraint("team_a_id != team_b_id", name="ck_different_teams"),
         CheckConstraint("score_a >= 0", name="ck_score_a"),
         CheckConstraint("score_b >= 0", name="ck_score_b"),
-        CheckConstraint("gk_pts_a IN (0,1,2)", name="ck_gk_a"),
-        CheckConstraint("gk_pts_b IN (0,1,2)", name="ck_gk_b"),
+        CheckConstraint("gk_pts_a >= 0", name="ck_gk_a"),
+        CheckConstraint("gk_pts_b >= 0", name="ck_gk_b"),
         Index("ix_match_group_status", "group_id", "status"),
     )
 
@@ -125,8 +137,81 @@ class MatchEvent(Base):
 
 
 def init_db():
-    """Create all tables and default admin user."""
+    """Create all tables, run migrations, create default admin."""
     Base.metadata.create_all(bind=engine)
+
+    # Migration: fix gk_pts constraints (allow any score, not just 0/1/2)
+    with engine.connect() as conn:
+        try:
+            # Check if old constraint exists by trying to insert a test value
+            result = conn.execute(text("SELECT sql FROM sqlite_master WHERE name='matches' AND type='table'"))
+            row = result.fetchone()
+            if row and "IN (0,1,2)" in (row[0] or ""):
+                print("Migrating matches table: removing gk_pts IN (0,1,2) constraint...")
+                conn.execute(text("""
+                    CREATE TABLE matches_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
+                        round INTEGER CHECK (round IN (1,2,3)),
+                        team_a_id INTEGER REFERENCES teams(id),
+                        team_b_id INTEGER REFERENCES teams(id),
+                        match_date TIMESTAMP,
+                        venue TEXT DEFAULT '',
+                        status VARCHAR(20) DEFAULT 'scheduled',
+                        score_a INTEGER DEFAULT 0 CHECK (score_a >= 0),
+                        score_b INTEGER DEFAULT 0 CHECK (score_b >= 0),
+                        own_goals_a INTEGER DEFAULT 0 CHECK (own_goals_a >= 0),
+                        own_goals_b INTEGER DEFAULT 0 CHECK (own_goals_b >= 0),
+                        gk_pts_a INTEGER DEFAULT 0 CHECK (gk_pts_a >= 0),
+                        gk_pts_b INTEGER DEFAULT 0 CHECK (gk_pts_b >= 0),
+                        version INTEGER DEFAULT 1,
+                        updated_by VARCHAR(100),
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        CHECK (team_a_id != team_b_id)
+                    )
+                """))
+                conn.execute(text("""
+                    INSERT INTO matches_new SELECT * FROM matches
+                """))
+                conn.execute(text("DROP TABLE matches"))
+                conn.execute(text("ALTER TABLE matches_new RENAME TO matches"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_match_group_status ON matches (group_id, status)"))
+                conn.commit()
+                print("Migration complete!")
+        except Exception as e:
+            print(f"Migration check: {e}")
+
+    # Migration: add logo column to teams
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("SELECT sql FROM sqlite_master WHERE name='teams' AND type='table'"))
+            row = result.fetchone()
+            if row and "logo" not in (row[0] or ""):
+                print("Adding logo column to teams...")
+                conn.execute(text("ALTER TABLE teams ADD COLUMN logo TEXT"))
+                conn.commit()
+                print("Logo column added!")
+        except Exception as e:
+            print(f"Logo migration: {e}")
+
+    # Migration: create coach_teams table if not exists
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(text("SELECT name FROM sqlite_master WHERE name='coach_teams' AND type='table'"))
+            if not result.fetchone():
+                print("Creating coach_teams table...")
+                conn.execute(text("""
+                    CREATE TABLE coach_teams (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                        team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE
+                    )
+                """))
+                conn.commit()
+                print("coach_teams table created!")
+        except Exception as e:
+            print(f"Coach teams migration: {e}")
+
     db = SessionLocal()
     try:
         if not db.query(User).filter_by(username="admin").first():

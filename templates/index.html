@@ -3,20 +3,40 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Турнир-менеджер</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+  <title>Савося</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <div class="header">
-    <a href="/" class="header-logo">⚽ <span>Турнир-менеджер</span></a>
+    <a href="/" class="header-logo"><img src="/static/logo.png" style="width:32px;height:32px;border-radius:6px" alt=""> <span>Савося</span></a>
     <div class="header-actions" id="auth-area"></div>
   </div>
 
-  <div class="container">
-    <h1 style="font-size:24px;font-weight:800;margin-bottom:4px">Группы турнира</h1>
-    <p class="text-muted mb-16">Выберите группу для просмотра расписания и статистики</p>
+  <!-- Hero banner -->
+  <div style="background:linear-gradient(135deg,#1a56db 0%,#2563eb 40%,#3b82f6 100%);color:#fff;padding:24px 20px;position:relative;overflow:hidden">
+    <div style="position:absolute;inset:0;opacity:.06;background:url('data:image/svg+xml,%3Csvg width=&quot;60&quot; height=&quot;60&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;%3E%3Cpath d=&quot;M30 5L55 17.5V42.5L30 55L5 42.5V17.5Z&quot; fill=&quot;none&quot; stroke=&quot;white&quot; stroke-width=&quot;1&quot;/%3E%3C/svg%3E') repeat"></div>
+    <div style="max-width:920px;margin:0 auto;display:flex;align-items:center;gap:20px;position:relative">
+      <img src="/static/logo.png" style="width:80px;height:80px;border-radius:16px;box-shadow:0 4px 15px rgba(0,0,0,.2);flex-shrink:0" alt="Савося">
+      <div>
+        <h1 style="font-size:44px;font-weight:900;letter-spacing:-1px;margin:0;text-shadow:0 2px 8px rgba(0,0,0,.15)">Савося</h1>
+        <div style="display:inline-flex;align-items:center;gap:8px;margin-top:4px;padding:3px 14px;background:rgba(255,255,255,.15);border-radius:20px;font-size:13px;font-weight:500">
+          <span style="width:6px;height:6px;border-radius:50%;background:#4ade80;display:inline-block"></span>
+          Футбольный турнир
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <div id="groups-grid" class="group-grid"></div>
+  <div class="container">
+    <!-- Groups -->
+    <div style="margin-bottom:24px">
+      <div style="font-size:13px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px">Возрастные группы</div>
+      <div id="groups-grid" class="group-grid"></div>
+    </div>
+
+    <!-- Dashboard: recent + upcoming side by side -->
+    <div id="dashboard"></div>
 
     <!-- Admin: create group -->
     <div id="admin-panel" class="hidden">
@@ -35,9 +55,26 @@
           <input class="input" id="u-login" placeholder="Логин" style="max-width:140px">
           <input class="input" id="u-pass" placeholder="Пароль" style="max-width:120px">
           <input class="input" id="u-name" placeholder="Имя" style="max-width:140px">
-          <button class="btn btn-primary" onclick="addUser()">+ Редактор</button>
+          <select class="input" id="u-role" style="max-width:120px">
+            <option value="editor">Редактор</option>
+            <option value="coach">Тренер</option>
+          </select>
+          <button class="btn btn-primary" onclick="addUser()">+ Добавить</button>
         </div>
         <div id="users-list"></div>
+      </div>
+      <div class="card" id="backup-panel" style="display:none">
+        <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">💾 Резервная копия</h3>
+        <p class="text-sm text-muted mb-8">Скачайте файл базы данных. Содержит все группы, команды, игроков, матчи и результаты.</p>
+        <button class="btn btn-primary" onclick="downloadBackup()">Скачать бэкап (tournament.db)</button>
+      </div>
+    </div>
+
+    <!-- Coach: manage rosters -->
+    <div id="coach-panel" class="hidden">
+      <div class="card">
+        <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">👤 Мои команды — управление составами</h3>
+        <div id="coach-roster"></div>
       </div>
     </div>
   </div>
@@ -57,12 +94,13 @@
         grid.innerHTML = '<div class="empty">Нет групп. Войдите как редактор, чтобы создать.</div>';
       } else {
         grid.innerHTML = groups.map(g => `
-          <a href="/group/${g.id}" class="card card-accent" style="text-decoration:none;color:inherit;transition:transform .1s">
-            <h3 style="font-size:17px;font-weight:800;margin-bottom:4px">${escHtml(g.name)}</h3>
-            <div class="text-sm text-muted mb-8">${g.birth_year} г.р.</div>
-            <div class="flex gap-8">
-              <span class="badge badge-pitch">${g.team_count} команд</span>
-              <span class="badge badge-accent">${g.played_count}/${g.match_count} матчей</span>
+          <a href="/group/${g.birth_year}" class="card card-accent" style="text-decoration:none;color:inherit;transition:all .2s;position:relative;overflow:hidden">
+            <div style="position:absolute;top:0;right:0;background:#2563eb;color:#fff;padding:4px 12px;border-radius:0 0 0 12px;font-size:11px;font-weight:700">${g.birth_year} г.р.</div>
+            <h3 style="font-size:18px;font-weight:800;margin-bottom:8px;padding-right:60px">${escHtml(g.name)}</h3>
+            <div style="display:flex;gap:16px;align-items:center">
+              <div style="text-align:center"><div style="font-size:20px;font-weight:800;color:var(--pitch)">${g.team_count}</div><div class="text-xs text-muted">команд</div></div>
+              <div style="width:1px;height:30px;background:var(--border)"></div>
+              <div style="text-align:center"><div style="font-size:20px;font-weight:800;color:var(--accent)">${g.played_count}</div><div class="text-xs text-muted">сыграно</div></div>
             </div>
           </a>
         `).join("");
@@ -101,13 +139,139 @@
     async function loadUsers() {
       try {
         const users = await API.get("/api/users");
-        document.getElementById("users-list").innerHTML = (users || []).map(u => `
-          <div class="flex items-center justify-between" style="padding:6px 10px;margin-bottom:4px">
-            <span><strong>${escHtml(u.display_name)}</strong> <span class="text-muted text-sm">(${u.username}, ${u.role})</span></span>
-            ${u.username !== 'admin' ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delUser(${u.id})">✕</button>` : ''}
-          </div>
-        `).join("");
+        const roleLabels = { admin: "админ", editor: "редактор", coach: "тренер" };
+        document.getElementById("users-list").innerHTML = (users || []).map(u => {
+          const coachInfo = u.coach_teams && u.coach_teams.length > 0
+            ? `<div class="text-xs" style="margin-top:4px;color:var(--pitch)">Команды: ${u.coach_teams.map(ct => ct.team_name + ' (' + ct.group_name + ')').join(', ')}</div>`
+            : (u.role === 'coach' ? '<div class="text-xs" style="margin-top:4px;color:var(--danger)">Нет назначенных команд</div>' : '');
+          return `<div style="padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong>${escHtml(u.display_name)}</strong>
+                <span class="badge ${u.role==='coach'?'badge-accent':'badge-pitch'}" style="margin-left:6px">${roleLabels[u.role] || u.role}</span>
+                <span class="text-xs text-muted" style="margin-left:4px">(${u.username})</span>
+              </div>
+              <div class="flex gap-8">
+                ${u.role === 'coach' ? `<button class="btn btn-ghost btn-sm" onclick="editCoachTeams(${u.id},'${escHtml(u.display_name)}')">⚽ Команды</button>` : ''}
+                <button class="btn btn-ghost btn-sm" onclick="editUser(${u.id},'${escHtml(u.username)}','${escHtml(u.display_name)}')">✏️</button>
+                ${u.username !== 'admin' ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delUser(${u.id})">✕</button>` : ''}
+              </div>
+            </div>
+            ${coachInfo}
+          </div>`;
+        }).join("");
       } catch {}
+    }
+
+    async function editCoachTeams(userId, displayName) {
+      const groups = await API.get("/api/groups");
+      const allTeams = [];
+      for (const g of (groups || [])) {
+        const t = await API.get(`/api/teams?group_id=${g.id}`);
+        (t || []).forEach(team => allTeams.push({ ...team, groupName: g.name }));
+      }
+      const users = await API.get("/api/users");
+      const user = (users || []).find(u => u.id === userId);
+      const assigned = new Set((user?.coach_teams || []).map(ct => ct.team_id));
+
+      let overlay = document.getElementById("coach-modal");
+      if (overlay) overlay.remove();
+      overlay = document.createElement("div");
+      overlay.id = "coach-modal";
+      overlay.className = "modal-overlay";
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+      overlay.innerHTML = `
+        <div class="modal" onclick="event.stopPropagation()" style="max-width:450px">
+          <div class="modal-header">
+            <h3>Команды тренера: ${escHtml(displayName)}</h3>
+            <button class="modal-close" onclick="document.getElementById('coach-modal').remove()">✕</button>
+          </div>
+          <div class="modal-body">
+            <p class="text-sm text-muted mb-16">Отметьте команды, составами которых может управлять тренер.</p>
+            <div id="coach-teams-list">${allTeams.map(t => `
+              <label style="display:flex;align-items:center;gap:10px;padding:10px 8px;cursor:pointer;border-bottom:1px solid var(--border)">
+                <input type="checkbox" value="${t.id}" ${assigned.has(t.id) ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0">
+                <span><strong>${escHtml(t.name)}</strong> <span class="text-xs text-muted">${escHtml(t.groupName)}</span></span>
+              </label>
+            `).join("")}</div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+              <button class="btn btn-ghost" onclick="document.getElementById('coach-modal').remove()">Отмена</button>
+              <button class="btn btn-primary" onclick="saveCoachTeams(${userId})">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    async function saveCoachTeams(userId) {
+      const checkboxes = document.querySelectorAll("#coach-teams-list input[type=checkbox]:checked");
+      const teamIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+      try {
+        await API.put(`/api/users/${userId}/teams`, { team_ids: teamIds });
+        document.getElementById("coach-modal").remove();
+        showToast("Команды назначены");
+        loadUsers();
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    function editUser(id, username, displayName) {
+      let overlay = document.getElementById("edit-user-modal");
+      if (overlay) overlay.remove();
+      overlay = document.createElement("div");
+      overlay.id = "edit-user-modal";
+      overlay.className = "modal-overlay";
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+      overlay.innerHTML = `
+        <div class="modal" onclick="event.stopPropagation()" style="max-width:400px">
+          <div class="modal-header">
+            <h3>Редактирование: ${escHtml(displayName)}</h3>
+            <button class="modal-close" onclick="document.getElementById('edit-user-modal').remove()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div id="eu-error" class="hidden" style="background:var(--danger-bg);color:var(--danger);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px"></div>
+            <div class="form-group" style="margin-bottom:12px">
+              <label>Логин</label>
+              <input class="input" id="eu-login" value="${escHtml(username)}">
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+              <label>Имя</label>
+              <input class="input" id="eu-name" value="${escHtml(displayName)}">
+            </div>
+            <div class="form-group" style="margin-bottom:16px">
+              <label>Новый пароль <span class="text-muted text-xs">(оставьте пустым, если не меняете)</span></label>
+              <input class="input" id="eu-pass" type="password" placeholder="">
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn btn-ghost" onclick="document.getElementById('edit-user-modal').remove()">Отмена</button>
+              <button class="btn btn-primary" onclick="saveUser(${id})">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    async function saveUser(id) {
+      const login = document.getElementById("eu-login").value.trim();
+      const name = document.getElementById("eu-name").value.trim();
+      const pass = document.getElementById("eu-pass").value;
+      const errEl = document.getElementById("eu-error");
+      errEl.classList.add("hidden");
+
+      if (!login || !name) {
+        errEl.textContent = "Логин и имя обязательны";
+        errEl.classList.remove("hidden"); return;
+      }
+      try {
+        await API.put(`/api/users/${id}`, { username: login, display_name: name, password: pass || undefined });
+        document.getElementById("edit-user-modal").remove();
+        showToast("Пользователь обновлён");
+        loadUsers();
+      } catch (e) {
+        errEl.textContent = e.message || "Ошибка";
+        errEl.classList.remove("hidden");
+      }
     }
 
     async function addUser() {
@@ -116,7 +280,7 @@
       const name = document.getElementById("u-name").value.trim();
       if (!login || !pass || !name) return showToast("Заполните все поля", true);
       try {
-        await API.post("/api/users", { username: login, password: pass, display_name: name, role: "editor" });
+        await API.post("/api/users", { username: login, password: pass, display_name: name, role: document.getElementById("u-role").value });
         document.getElementById("u-login").value = "";
         document.getElementById("u-pass").value = "";
         document.getElementById("u-name").value = "";
@@ -130,14 +294,140 @@
       try { await API.del(`/api/users/${id}`); loadUsers(); } catch (e) { showToast(e.message, true); }
     }
 
+    async function downloadBackup() {
+      try {
+        const r = await fetch("/api/backup", { headers: { "Authorization": `Bearer ${API.token}` } });
+        if (!r.ok) throw new Error("Ошибка скачивания");
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "tournament_backup.db";
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        showToast("Бэкап скачан");
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    async function loadDashboard() {
+      try {
+        const d = await API.get("/api/dashboard");
+        if (!d) return;
+        const el = document.getElementById("dashboard");
+        if ((!d.recent || d.recent.length === 0) && (!d.upcoming || d.upcoming.length === 0)) { el.innerHTML = ""; return; }
+
+        let leftHtml = "", rightHtml = "";
+
+        // Recent results
+        if (d.recent && d.recent.length > 0) {
+          leftHtml += `<div class="dash-title">🏁 Последние результаты</div>`;
+          d.recent.forEach(m => {
+            leftHtml += `<a href="/group/${m.birth_year}" class="dash-match">
+              <span class="dash-group-tag">${escHtml(m.group_name)}</span>
+              <span class="dash-team right">${escHtml(m.team_a)}</span>
+              ${m.team_a_logo ? `<img src="${m.team_a_logo}" class="dash-logo">` : ''}
+              <span class="dash-score">${m.score_a} : ${m.score_b}</span>
+              ${m.team_b_logo ? `<img src="${m.team_b_logo}" class="dash-logo">` : ''}
+              <span class="dash-team">${escHtml(m.team_b)}</span>
+              ${m.date ? `<span class="text-xs text-muted">${m.date}</span>` : ''}
+            </a>`;
+          });
+        }
+
+        // Upcoming
+        if (d.upcoming && d.upcoming.length > 0) {
+          rightHtml += `<div class="dash-title">📅 Ближайшие матчи</div>`;
+          d.upcoming.forEach(m => {
+            rightHtml += `<a href="/group/${m.birth_year}" class="dash-match">
+              <span class="dash-group-tag">${escHtml(m.group_name)}</span>
+              <span class="dash-team right">${escHtml(m.team_a)}</span>
+              ${m.team_a_logo ? `<img src="${m.team_a_logo}" class="dash-logo">` : ''}
+              <span style="min-width:45px;text-align:center;font-size:12px;color:var(--muted);font-weight:500">vs</span>
+              ${m.team_b_logo ? `<img src="${m.team_b_logo}" class="dash-logo">` : ''}
+              <span class="dash-team">${escHtml(m.team_b)}</span>
+              <span class="text-xs text-muted">${m.date}${m.venue ? ' · '+escHtml(m.venue) : ''}</span>
+            </a>`;
+          });
+        }
+
+        el.innerHTML = `${leftHtml ? `<div style="margin-bottom:20px">${leftHtml}</div>` : ''}${rightHtml ? `<div>${rightHtml}</div>` : ''}`;
+      } catch (e) { console.error("Dashboard error:", e); }
+    }
+
+    // Coach roster management
+    async function loadCoachRoster() {
+      try {
+        const teamIds = await API.get("/api/users/me/teams") || [];
+        if (teamIds.length === 0) {
+          document.getElementById("coach-roster").innerHTML = '<p class="text-muted text-sm">Нет назначенных команд. Обратитесь к администратору.</p>';
+          return;
+        }
+        let html = "";
+        const allTeams = await API.get(`/api/teams?group_id=0`) || [];
+        const allGroups = await API.get("/api/groups") || [];
+        for (const tid of teamIds) {
+          const playersList = await API.get(`/api/players?team_id=${tid}`);
+          const team = allTeams.find(t => t.id === tid);
+          const group = team ? allGroups.find(g => g.id === team.group_id) : null;
+          const teamLabel = team ? `${team.name} (${group ? group.birth_year + ' г.р.' : '?'})` : "Команда";
+          html += `<div style="margin-bottom:20px">
+            <div style="font-size:13px;font-weight:800;color:var(--pitch);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${escHtml(teamLabel)}</div>
+            <div class="form-row">
+              <input class="input" id="cp-name-${tid}" placeholder="ФИО" style="max-width:200px">
+              <input class="input" id="cp-num-${tid}" type="number" placeholder="№" style="max-width:60px">
+              <button class="btn btn-primary btn-sm" onclick="coachAddPlayer(${tid})">+ Игрок</button>
+            </div>`;
+          if (!playersList || playersList.length === 0) {
+            html += '<div class="text-xs text-muted" style="margin-left:8px">Нет игроков</div>';
+          } else {
+            (playersList || []).forEach(p => {
+              html += `<div class="flex items-center justify-between" style="padding:5px 8px;font-size:13px;border-bottom:1px solid var(--border)">
+                <span>${p.number != null ? '<span class="badge badge-pitch" style="margin-right:6px">#'+p.number+'</span>' : ''}${escHtml(p.full_name)}</span>
+                <button onclick="coachDelPlayer(${p.id})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px">✕</button>
+              </div>`;
+            });
+          }
+          html += `</div>`;
+        }
+        document.getElementById("coach-roster").innerHTML = html;
+      } catch (e) { console.error(e); }
+    }
+
+    async function coachAddPlayer(teamId) {
+      const name = document.getElementById(`cp-name-${teamId}`).value.trim();
+      const num = document.getElementById(`cp-num-${teamId}`).value;
+      if (!name) return;
+      try {
+        await API.post("/api/players", { team_id: teamId, full_name: name, number: num ? parseInt(num) : null });
+        document.getElementById(`cp-name-${teamId}`).value = "";
+        document.getElementById(`cp-num-${teamId}`).value = "";
+        showToast("Игрок добавлен");
+        loadCoachRoster();
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    async function coachDelPlayer(playerId) {
+      try {
+        await API.del(`/api/players/${playerId}`);
+        loadCoachRoster();
+      } catch (e) { showToast(e.message, true); }
+    }
+
     // Init
     updateAuthUI();
     loadGroups();
+    loadDashboard();
     if (API.isLoggedIn()) {
-      document.getElementById("admin-panel").classList.remove("hidden");
-      if (API.user?.role === "admin") {
-        document.getElementById("users-panel").style.display = "block";
-        loadUsers();
+      const role = API.user?.role;
+      if (role === "admin" || role === "editor") {
+        document.getElementById("admin-panel").classList.remove("hidden");
+        if (role === "admin") {
+          document.getElementById("users-panel").style.display = "block";
+          document.getElementById("backup-panel").style.display = "block";
+          loadUsers();
+        }
+      } else if (role === "coach") {
+        document.getElementById("coach-panel").classList.remove("hidden");
+        loadCoachRoster();
       }
     }
   </script>

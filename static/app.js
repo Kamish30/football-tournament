@@ -87,17 +87,102 @@ function showToast(msg, isError = false) {
 }
 
 
+/* ── Dark Theme ── */
+function initTheme() {
+  const saved = localStorage.getItem("theme");
+  if (saved === "dark") document.documentElement.setAttribute("data-theme", "dark");
+}
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme");
+  const next = current === "dark" ? "" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("theme", next || "light");
+  updateAuthUI();
+}
+initTheme();
+
+
 /* ── Auth UI ── */
 function updateAuthUI() {
   const authArea = document.getElementById("auth-area");
   if (!authArea) return;
+  const themeBtn = `<button class="btn-header" onclick="toggleTheme()" title="Тема">${document.documentElement.getAttribute('data-theme')==='dark'?'☀️':'🌙'}</button>`;
   if (API.isLoggedIn()) {
     authArea.innerHTML = `
       <span style="font-size:12px;opacity:.8">${API.user.display_name}</span>
+      <button class="btn-header" onclick="showChangePassword()">🔑</button>
+      ${themeBtn}
       <button class="btn-header" onclick="API.logout()">Выйти</button>
     `;
   } else {
-    authArea.innerHTML = `<a href="/login" class="btn-header" style="text-decoration:none">Войти</a>`;
+    authArea.innerHTML = `${themeBtn}<a href="/login" class="btn-header" style="text-decoration:none">Войти</a>`;
+  }
+}
+
+/* ── Change Password Modal ── */
+function showChangePassword() {
+  let overlay = document.getElementById("pw-modal");
+  if (overlay) { overlay.remove(); }
+  overlay = document.createElement("div");
+  overlay.id = "pw-modal";
+  overlay.className = "modal-overlay";
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+      <div class="modal-header">
+        <h3>Сменить пароль</h3>
+        <button class="modal-close" onclick="document.getElementById('pw-modal').remove()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="pw-error" class="hidden" style="background:var(--danger-bg);color:var(--danger);padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:12px"></div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>Текущий пароль</label>
+          <input class="input" id="pw-old" type="password">
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>Новый пароль</label>
+          <input class="input" id="pw-new" type="password">
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <label>Повторите новый пароль</label>
+          <input class="input" id="pw-confirm" type="password">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="document.getElementById('pw-modal').remove()">Отмена</button>
+          <button class="btn btn-primary" onclick="doChangePassword()">Сменить</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+async function doChangePassword() {
+  const oldPw = document.getElementById("pw-old").value;
+  const newPw = document.getElementById("pw-new").value;
+  const confirm = document.getElementById("pw-confirm").value;
+  const errEl = document.getElementById("pw-error");
+  errEl.classList.add("hidden");
+
+  if (!oldPw || !newPw) {
+    errEl.textContent = "Заполните все поля";
+    errEl.classList.remove("hidden"); return;
+  }
+  if (newPw !== confirm) {
+    errEl.textContent = "Пароли не совпадают";
+    errEl.classList.remove("hidden"); return;
+  }
+  if (newPw.length < 4) {
+    errEl.textContent = "Минимум 4 символа";
+    errEl.classList.remove("hidden"); return;
+  }
+  try {
+    await API.put("/api/users/password", { old_password: oldPw, new_password: newPw });
+    document.getElementById("pw-modal").remove();
+    showToast("Пароль изменён");
+  } catch (e) {
+    errEl.textContent = e.message || "Ошибка";
+    errEl.classList.remove("hidden");
   }
 }
 

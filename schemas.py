@@ -17,8 +17,8 @@ class LoginResponse(BaseModel):
     role: str
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
-    password: str = Field(min_length=4)
+    username: str = Field(min_length=1, max_length=50)
+    password: str = Field(min_length=1)
     display_name: str = Field(min_length=1, max_length=100)
     role: str = "editor"
 
@@ -50,6 +50,7 @@ class TeamOut(BaseModel):
     group_id: int
     name: str
     short_name: str
+    logo: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -90,8 +91,8 @@ class MatchUpdate(BaseModel):
     score_b: int = Field(ge=0)
     own_goals_a: int = Field(ge=0, default=0)
     own_goals_b: int = Field(ge=0, default=0)
-    gk_pts_a: int = Field(ge=0, le=2, default=0)
-    gk_pts_b: int = Field(ge=0, le=2, default=0)
+    gk_pts_a: int = Field(ge=0, default=0)
+    gk_pts_b: int = Field(ge=0, default=0)
     status: str = "played"
     venue: str = ""
     match_date: Optional[str] = None

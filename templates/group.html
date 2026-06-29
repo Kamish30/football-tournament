@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Группа — Турнир-менеджер</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+  <title>Группа — Савося</title>
   <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
   <div class="header">
-    <a href="/" class="header-logo">⚽ <span>Турнир-менеджер</span></a>
+    <a href="/" class="header-logo"><img src="/static/logo.png" style="width:32px;height:32px;border-radius:6px" alt=""> <span>Савося</span></a>
     <div class="header-actions" id="auth-area"></div>
   </div>
 
@@ -23,6 +25,12 @@
       <div id="admin-btns" class="hidden flex gap-8">
         <button class="btn btn-primary btn-sm" onclick="togglePanel('teams')">Команды</button>
         <button class="btn btn-primary btn-sm" onclick="togglePanel('players')">Игроки</button>
+        <button class="btn btn-accent btn-sm" onclick="togglePanel('stats')">📊 Статистика</button>
+      </div>
+      <div class="flex gap-8 flex-wrap">
+        <button class="btn btn-ghost btn-sm" onclick="shareLink()" title="Скопировать ссылку">🔗 Поделиться</button>
+        <button class="btn btn-ghost btn-sm" onclick="togglePanel('export')" title="Экспорт в Excel">📥 Excel</button>
+        <button class="btn btn-ghost btn-sm" onclick="togglePanel('images')" title="Картинки для соцсетей">📸 Картинки</button>
       </div>
     </div>
 
@@ -46,6 +54,51 @@
       </div>
       <div id="players-list"></div>
     </div>
+    <div id="panel-stats" class="card hidden" style="border-color:var(--accent)">
+      <h3 class="font-bold mb-8">📊 Быстрый ввод статистики</h3>
+      <p class="text-sm text-muted mb-8">Выберите матч и добавляйте голы/ассисты игрокам.</p>
+      <div class="form-row">
+        <div class="form-group" style="flex:1">
+          <label>Матч</label>
+          <select class="input" id="stats-match" onchange="loadStatsPanel()">
+            <option value="">Выберите матч...</option>
+          </select>
+        </div>
+      </div>
+      <div id="stats-players"></div>
+    </div>
+    <div id="panel-export" class="card hidden" style="border-color:var(--accent)">
+      <h3 class="font-bold mb-8">📥 Экспорт в Excel (CSV)</h3>
+      <p class="text-sm text-muted mb-16">Скачайте данные группы в формате CSV — откроется в Excel, Google Таблицах и других программах.</p>
+      <div class="flex gap-8 flex-wrap">
+        <a class="btn btn-accent btn-sm" id="exp-standings" download>Таблица</a>
+        <a class="btn btn-accent btn-sm" id="exp-crosstable" download>Шахматка</a>
+        <a class="btn btn-accent btn-sm" id="exp-matches" download>Матчи</a>
+        <a class="btn btn-accent btn-sm" id="exp-scorers" download>Бомбардиры</a>
+        <a class="btn btn-accent btn-sm" id="exp-assists" download>Ассистенты</a>
+        <a class="btn btn-accent btn-sm" id="exp-players" download>Игроки</a>
+      </div>
+    </div>
+    <div id="panel-images" class="card hidden" style="border-color:var(--pitch)">
+      <h3 class="font-bold mb-8">📸 Картинки для соцсетей</h3>
+      <p class="text-sm text-muted mb-16">Скачайте таблицы как картинки PNG для публикации в соцсетях и мессенджерах.</p>
+      <div class="flex gap-8 flex-wrap">
+        <button class="btn btn-primary btn-sm" onclick="exportImage('standings')">Таблица</button>
+        <button class="btn btn-primary btn-sm" onclick="exportImage('crosstable')">Шахматка</button>
+        <button class="btn btn-primary btn-sm" onclick="exportImage('gk')">Вратари</button>
+        <button class="btn btn-primary btn-sm" onclick="exportImage('scorers')">Бомбардиры</button>
+        <button class="btn btn-primary btn-sm" onclick="exportImage('assists')">Ассистенты</button>
+      </div>
+    </div>
+
+    <!-- Player search -->
+    <div style="position:relative;margin-bottom:12px">
+      <div class="flex items-center gap-8" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px">
+        <span>🔍</span>
+        <input class="input" id="player-search" placeholder="Поиск игрока по имени..." style="border:none;padding:4px 0;font-size:14px" oninput="searchPlayers(this.value)">
+      </div>
+      <div id="search-results" style="position:absolute;left:0;right:0;top:100%;z-index:50;background:var(--surface);border:1px solid var(--border);border-radius:0 0 10px 10px;max-height:300px;overflow-y:auto;display:none;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+    </div>
 
     <!-- Tabs -->
     <div class="tabs" id="tabs">
@@ -54,7 +107,7 @@
       <button class="tab" data-tab="crosstable">Шахматка</button>
       <button class="tab" data-tab="gk">🧤 Вратари</button>
       <button class="tab" data-tab="scorers">⚽ Бомбардиры</button>
-      <button class="tab" data-tab="assists">👟 Ассисты</button>
+      <button class="tab" data-tab="assists">👟 Ассистенты</button>
     </div>
 
     <!-- Tab content -->
@@ -94,7 +147,8 @@
       if (group) {
         document.getElementById("group-title").textContent = group.name;
         document.getElementById("group-subtitle").textContent = group.birth_year + " г.р.";
-        document.title = group.name + " — Турнир-менеджер";
+        document.title = group.name + " — Савося";
+        groupInfo = { name: group.name, birthYear: group.birth_year };
       }
       teams = t || []; players = p || []; matches = m || [];
       renderTeamsList();
@@ -123,46 +177,95 @@
     }
 
     /* ── Schedule ── */
+    let scheduleFilter = { status: "", team: "" };
+
     function renderSchedule() {
       const el = document.getElementById("tab-schedule");
       const isEditor = API.isLoggedIn();
 
-      let html = `<div class="flex items-center justify-between mb-16">
+      // Filters
+      let html = `<div class="flex items-center justify-between mb-8 flex-wrap gap-8">
         <span class="text-muted">${matches.length} матчей</span>
-        ${isEditor ? '<button class="btn btn-primary btn-sm" onclick="showNewMatch()">+ Новый матч</button>' : ''}
+        <div class="flex gap-8 flex-wrap">
+          <select class="input" style="width:140px;padding:4px 8px;font-size:12px" onchange="scheduleFilter.status=this.value;renderSchedule()">
+            <option value="">Все статусы</option>
+            <option value="scheduled" ${scheduleFilter.status==='scheduled'?'selected':''}>Запланированные</option>
+            <option value="played" ${scheduleFilter.status==='played'?'selected':''}>Сыгранные</option>
+            <option value="postponed" ${scheduleFilter.status==='postponed'?'selected':''}>Перенесённые</option>
+          </select>
+          <select class="input" style="width:150px;padding:4px 8px;font-size:12px" onchange="scheduleFilter.team=this.value;renderSchedule()">
+            <option value="">Все команды</option>
+            ${teams.map(t => `<option value="${t.id}" ${scheduleFilter.team==t.id?'selected':''}>${escHtml(t.name)}</option>`).join("")}
+          </select>
+          ${isEditor ? `<button class="btn btn-primary btn-sm" onclick="showNewMatch()">+ Матч</button>
+            <button class="btn btn-accent btn-sm" onclick="showGenerateRound()">⚡ Генерация круга</button>` : ''}
+        </div>
       </div>`;
       html += '<div id="new-match-form" class="hidden"></div>';
+      html += '<div id="generate-round-form" class="hidden"></div>';
+
+      // Apply filters
+      let filtered = matches;
+      if (scheduleFilter.status) filtered = filtered.filter(m => m.status === scheduleFilter.status);
+      if (scheduleFilter.team) filtered = filtered.filter(m => m.team_a_id == scheduleFilter.team || m.team_b_id == scheduleFilter.team);
 
       // Group by date+venue
       const grouped = {};
-      matches.forEach(m => {
+      filtered.forEach(m => {
         const key = m.match_date ? m.match_date.split("T")[0] + (m.venue ? " · " + m.venue : "") : "Без даты";
         (grouped[key] = grouped[key] || []).push(m);
       });
 
-      if (matches.length === 0) {
-        html += '<div class="empty">Нет матчей. ' + (isEditor ? 'Создайте первый.' : '') + '</div>';
+      if (filtered.length === 0) {
+        html += '<div class="empty">Нет матчей' + (scheduleFilter.status || scheduleFilter.team ? ' по фильтру' : '') + '. ' + (isEditor ? 'Создайте первый.' : '') + '</div>';
       } else {
         for (const [key, ms] of Object.entries(grouped)) {
           html += `<div class="date-header">${escHtml(key)}</div>`;
           ms.forEach(m => {
             const isPlayed = m.status === "played";
-            html += `<div class="match-card" onclick="openMatch(${m.id})">
-              <span class="badge badge-pitch">Круг ${m.round}</span>
-              <div class="match-teams">
-                <span class="match-team">${escHtml(m.team_a_name)}</span>
+            html += `<div class="match-card-v2" onclick="openMatch(${m.id})">
+              <span class="match-team-v2 left">${escHtml(m.team_a_name)}</span>
+              <div class="match-center">
+                <span class="match-round-label">Круг ${m.round}</span>
                 ${isPlayed
-                  ? `<span class="match-score">${m.score_a} : ${m.score_b}</span>`
-                  : '<span class="match-vs">vs</span>'}
-                <span class="match-team">${escHtml(m.team_b_name)}</span>
+                  ? `<span class="match-score-v2">${m.score_a} : ${m.score_b}</span>`
+                  : `<span class="match-vs-v2">vs</span>`}
+                ${(m.gk_pts_a || m.gk_pts_b) ? `<span class="match-gk-label">🧤 ${m.gk_pts_a}:${m.gk_pts_b}</span>` : ''}
               </div>
-              ${statusBadge(m.status)}
-              ${isEditor ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();delMatch(${m.id})" style="color:var(--muted);border:none">🗑</button>` : ''}
+              <span class="match-team-v2 right">${escHtml(m.team_b_name)}</span>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:8px">
+                ${statusBadge(m.status)}
+                ${isEditor ? `<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();delMatch(${m.id})" style="color:var(--muted);border:none;padding:2px 6px">🗑</button>` : ''}
+              </div>
             </div>`;
           });
         }
       }
       el.innerHTML = html;
+    }
+
+    function showGenerateRound() {
+      const el = document.getElementById("generate-round-form");
+      if (!el || !el.classList.contains("hidden")) { if(el) el.classList.add("hidden"); return; }
+      el.classList.remove("hidden");
+      el.innerHTML = `<div class="card" style="background:var(--accent-light)">
+        <div class="flex gap-8 items-center flex-wrap">
+          <span style="font-weight:600;font-size:13px">Сгенерировать все пары для круга:</span>
+          <select class="input" id="gen-round" style="width:70px"><option>1</option><option>2</option><option>3</option></select>
+          <button class="btn btn-accent btn-sm" onclick="generateRound()">Сгенерировать</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('generate-round-form').classList.add('hidden')">Отмена</button>
+        </div>
+      </div>`;
+    }
+
+    async function generateRound() {
+      const round = parseInt(document.getElementById("gen-round").value);
+      try {
+        const res = await API.post("/api/matches/generate", { group_id: GROUP_ID, round });
+        showToast(res.message);
+        document.getElementById("generate-round-form").classList.add("hidden");
+        loadAll();
+      } catch (e) { showToast(e.message, true); }
     }
 
     function showNewMatch() {
@@ -178,7 +281,7 @@
           <div class="form-group"><label>Круг</label>
             <select class="input" id="nm-round" style="width:70px"><option>1</option><option>2</option><option>3</option></select></div>
           <div class="form-group"><label>Дата</label>
-            <input type="datetime-local" class="input" id="nm-date" style="width:180px"></div>
+            <input type="date" class="input" id="nm-date" style="width:150px"></div>
           <div class="form-group"><label>Площадка</label>
             <input class="input" id="nm-venue" placeholder="Поле №1" style="width:120px"></div>
           <div class="form-group" style="justify-content:flex-end">
@@ -234,8 +337,8 @@
               <option value="postponed" ${m.status==='postponed'?'selected':''}>Перенесён</option>
               <option value="cancelled" ${m.status==='cancelled'?'selected':''}>Отменён</option>
             </select></div>
-          <div class="form-group" style="flex:1;min-width:140px"><label>Дата/время</label>
-            <input type="datetime-local" class="input" id="m-date" value="${m.match_date ? m.match_date.slice(0,16) : ''}"></div>
+          <div class="form-group" style="flex:1;min-width:140px"><label>Дата</label>
+            <input type="date" class="input" id="m-date" value="${m.match_date ? m.match_date.slice(0,10) : ''}"></div>
           <div class="form-group" style="flex:1;min-width:120px"><label>Площадка</label>
             <input class="input" id="m-venue" value="${escHtml(m.venue)}"></div>
         </div>`;
@@ -252,9 +355,9 @@
           <div class="form-group"><label>Автоголы ${escHtml(m.team_a_short)}</label><input type="number" min="0" class="input" id="m-oga" value="${m.own_goals_a}"></div>
           <div class="form-group"><label>Автоголы ${escHtml(m.team_b_short)}</label><input type="number" min="0" class="input" id="m-ogb" value="${m.own_goals_b}"></div>
           <div class="form-group"><label>Батл вратарей ${escHtml(m.team_a_short)}</label>
-            <select class="input" id="m-gka"><option value="0" ${m.gk_pts_a===0?'selected':''}>0</option><option value="1" ${m.gk_pts_a===1?'selected':''}>1</option><option value="2" ${m.gk_pts_a===2?'selected':''}>2</option></select></div>
+            <input type="number" min="0" class="input" id="m-gka" value="${m.gk_pts_a}" placeholder="0"></div>
           <div class="form-group"><label>Батл вратарей ${escHtml(m.team_b_short)}</label>
-            <select class="input" id="m-gkb"><option value="0" ${m.gk_pts_b===0?'selected':''}>0</option><option value="1" ${m.gk_pts_b===1?'selected':''}>1</option><option value="2" ${m.gk_pts_b===2?'selected':''}>2</option></select></div>
+            <input type="number" min="0" class="input" id="m-gkb" value="${m.gk_pts_b}" placeholder="0"></div>
         </div>`;
 
         // Events
@@ -276,7 +379,7 @@
           <button class="btn btn-primary" onclick="saveMatch()">Сохранить</button>
         </div>`;
       } else {
-        // Viewer mode
+        // Viewer mode with timeline
         html += `<div class="flex items-center justify-between mb-8">
           ${statusBadge(m.status)}
           <span class="text-sm text-muted">${m.match_date ? new Date(m.match_date).toLocaleString("ru") : "Дата не указана"}${m.venue ? ' · ' + escHtml(m.venue) : ''}</span>
@@ -288,11 +391,33 @@
           <div class="score-team"><div class="score-team-name">${escHtml(m.team_b_name)}</div>
             <div style="font-size:28px;font-weight:800">${m.score_b}</div></div>
         </div>`;
-        if (m.gk_pts_a || m.gk_pts_b) {
-          html += `<div class="text-sm text-muted" style="text-align:center;margin-bottom:12px">Батл вратарей: ${m.gk_pts_a} : ${m.gk_pts_b}</div>`;
+        if (m.own_goals_a || m.own_goals_b) {
+          html += `<div class="text-xs text-muted" style="text-align:center;margin-bottom:4px">Автоголы: ${m.team_a_short} ${m.own_goals_a} — ${m.own_goals_b} ${m.team_b_short}</div>`;
         }
+        if (m.gk_pts_a || m.gk_pts_b) {
+          html += `<div class="text-sm" style="text-align:center;margin-bottom:12px"><span class="badge badge-accent">🧤 Батл вратарей: ${m.gk_pts_a} : ${m.gk_pts_b}</span></div>`;
+        }
+        // Event timeline
         if (m.events && m.events.length) {
-          html += `<div style="margin-top:8px">${m.events.map(e => `<div style="padding:4px 0;font-size:13px">${e.type==='goal'?'⚽':'👟'} ${escHtml(e.player_name)} ${e.minute ? '('+e.minute+"')" : ''}</div>`).join("")}</div>`;
+          const eventsA = m.events.filter(e => playersA.some(p => p.id === e.player_id));
+          const eventsB = m.events.filter(e => playersB.some(p => p.id === e.player_id));
+          const allEvts = m.events.slice().sort((a, b) => (a.minute || 99) - (b.minute || 99));
+          html += `<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Хроника матча</div>`;
+          allEvts.forEach(e => {
+            const isTeamA = playersA.some(p => p.id === e.player_id);
+            const icon = e.type === 'goal' ? '⚽' : '👟';
+            const label = e.type === 'goal' ? 'Гол' : 'Ассист';
+            const align = isTeamA ? 'flex-start' : 'flex-end';
+            const textAlign = isTeamA ? 'left' : 'right';
+            html += `<div style="display:flex;justify-content:${align};margin-bottom:6px">
+              <div style="text-align:${textAlign};padding:6px 12px;border-radius:8px;background:${isTeamA ? 'var(--pitch-light)' : 'var(--accent-light)'};max-width:70%;cursor:pointer" onclick="openPlayerCard(${e.player_id})">
+                <div style="font-weight:600;font-size:13px">${icon} ${escHtml(e.player_name)}</div>
+                <div style="font-size:11px;color:var(--muted)">${label}${e.minute ? " · " + e.minute + "'" : ""}</div>
+              </div>
+            </div>`;
+          });
+          html += `</div>`;
         }
       }
 
@@ -352,24 +477,29 @@
       }
     }
 
-    function closeModal() { document.getElementById("match-modal").classList.add("hidden"); currentMatch = null; }
+    function closeModal() { document.getElementById("match-modal").classList.add("hidden"); currentMatch = null; document.querySelector("#match-modal .modal").style.maxWidth = "560px"; }
 
     /* ── Standings ── */
     async function renderStandings() {
       const rows = await API.get(`/api/standings?group_id=${GROUP_ID}`);
       const el = document.getElementById("tab-standings");
       if (!rows || rows.length === 0) { el.innerHTML = '<div class="empty">Нет данных.</div>'; return; }
+      const getLogo = (tid) => { const t = teams.find(x => x.id === tid); return t?.logo; };
       el.innerHTML = `<div class="overflow-x"><table class="data-table"><thead><tr>
-        <th class="center">#</th><th>Команда</th><th class="center">И</th><th class="center">В</th><th class="center">Н</th><th class="center">П</th><th class="center">ГЗ</th><th class="center">ГП</th><th class="center">РМ</th><th class="center" style="font-weight:800;color:var(--pitch)">О</th>
-      </tr></thead><tbody>${rows.map((r, i) => `<tr class="${i===0?'highlight':''}">
-        <td class="center" style="font-weight:700;color:var(--muted)">${r.position}</td>
-        <td style="font-weight:600">${escHtml(r.team_name)}</td>
+        <th class="center">#</th><th>Команда</th><th class="center">И</th><th class="center">В</th><th class="center">Н</th><th class="center">П</th><th class="center">ГЗ</th><th class="center">ГП</th><th class="center">РМ</th><th class="center" style="font-weight:900;">О</th><th class="center">Форма</th>
+      </tr></thead><tbody>${rows.map((r, i) => {
+        const logo = getLogo(r.team_id);
+        const formHtml = (r.form || []).map(f => `<span class="form-dot ${f}"></span>`).join("");
+        return `<tr class="${i===0?'highlight':''}">
+        <td class="center" style="font-weight:800;color:var(--muted)">${r.position}</td>
+        <td style="font-weight:700;cursor:pointer" onclick="openTeamCard(${r.team_id})">${logo ? `<img src="${logo}" class="team-logo">` : ''}${escHtml(r.team_name)}</td>
         <td class="center">${r.mp}</td><td class="center">${r.w}</td><td class="center">${r.d}</td><td class="center">${r.l}</td>
         <td class="center">${r.gf}</td><td class="center">${r.ga}</td>
-        <td class="center" style="font-weight:600;color:${r.gd>0?'var(--pitch)':r.gd<0?'var(--danger)':'var(--muted)'}">${r.gd>0?'+':''}${r.gd}</td>
-        <td class="center" style="font-weight:800;font-size:15px;color:var(--pitch)">${r.pts}</td>
-      </tr>`).join("")}</tbody></table></div>
-      <div class="text-xs text-muted" style="margin-top:8px">И — игры, В — победы, Н — ничьи, П — поражения, ГЗ — забито, ГП — пропущено, РМ — разница, О — очки</div>`;
+        <td class="center" style="font-weight:700;color:${r.gd>0?'var(--pitch)':r.gd<0?'var(--danger)':'var(--muted)'}">${r.gd>0?'+':''}${r.gd}</td>
+        <td class="center" style="font-weight:900;font-size:16px;color:var(--pitch)">${r.pts}</td>
+        <td class="center"><span class="form-dots">${formHtml}</span></td>
+      </tr>`;}).join("")}</tbody></table></div>
+      <div class="text-xs text-muted" style="margin-top:8px">И — игры, В — победы, Н — ничьи, П — поражения, ГЗ — забито, ГП — пропущено, РМ — разница, О — очки. Форма: <span class="form-dot W"></span> победа <span class="form-dot D"></span> ничья <span class="form-dot L"></span> поражение</div>`;
     }
 
     /* ── Cross Table ── */
@@ -409,14 +539,15 @@
       const el = document.getElementById("tab-gk");
       if (!rows || rows.length === 0) { el.innerHTML = '<div class="empty">Нет данных по баттлам вратарей.</div>'; return; }
       el.innerHTML = `<div class="overflow-x"><table class="data-table"><thead><tr style="background:var(--accent-light)">
-        <th class="center">#</th><th>Команда</th><th class="center">Баттлов</th><th class="center">В</th><th class="center">Н</th><th class="center">П</th><th class="center" style="font-weight:800;color:var(--accent)">Очки</th>
+        <th class="center">#</th><th>Команда</th><th class="center">Б</th><th class="center">В</th><th class="center">Н</th><th class="center">П</th><th class="center">ЗБ</th><th class="center">ПР</th><th class="center" style="font-weight:800;color:var(--accent)">Очки</th>
       </tr></thead><tbody>${rows.map((r, i) => `<tr${i===0?' class="highlight"':''} style="${i===0?'background:var(--accent-light)':''}">
         <td class="center" style="font-weight:700;color:var(--muted)">${r.position}</td>
         <td style="font-weight:600">${escHtml(r.team_name)}</td>
         <td class="center">${r.battles}</td><td class="center">${r.wins}</td><td class="center">${r.draws}</td><td class="center">${r.losses}</td>
+        <td class="center">${r.gk_gf}</td><td class="center">${r.gk_ga}</td>
         <td class="center" style="font-weight:800;font-size:15px;color:var(--accent)">${r.gk_pts}</td>
       </tr>`).join("")}</tbody></table></div>
-      <div class="text-xs text-muted" style="margin-top:8px">Победа = 2 очка, ничья = 1 очко</div>`;
+      <div class="text-xs text-muted" style="margin-top:8px">Б — баттлов, В — победы, Н — ничьи, П — поражения, ЗБ — забито, ПР — пропущено. Победа = 2 очка, ничья = 1 очко</div>`;
     }
 
     /* ── Leaderboard ── */
@@ -425,7 +556,7 @@
       const el = document.getElementById(type === "goal" ? "tab-scorers" : "tab-assists");
       if (!rows || rows.length === 0) { el.innerHTML = '<div class="empty">Нет данных.</div>'; return; }
       el.innerHTML = rows.map((r, i) => `
-        <div class="lb-row ${i===0?'top':''}">
+        <div class="lb-row ${i===0?'top':''}" style="cursor:pointer" onclick="openPlayerCard(${r.player_id})">
           <span class="lb-pos ${i<3?'gold':''}">${r.position}</span>
           <div class="lb-info"><div class="lb-name">${escHtml(r.player_name)}</div>
             <div class="lb-team">${escHtml(r.team_name)}${r.number != null ? ' · #'+r.number : ''}</div></div>
@@ -434,17 +565,202 @@
       `).join("");
     }
 
+    /* ── Player Card ── */
+    async function openPlayerCard(playerId) {
+      try {
+        const p = await API.get(`/api/players/${playerId}/stats`);
+        if (!p) return;
+        let html = `<div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:36px;font-weight:800;color:var(--pitch)">${p.number != null ? '#'+p.number : ''}</div>
+          <div style="font-size:20px;font-weight:800">${escHtml(p.full_name)}</div>
+          <div class="text-sm" style="color:var(--pitch);cursor:pointer;font-weight:600" onclick="openTeamCard(${p.team_id})">${escHtml(p.team_name)}</div>
+        </div>`;
+        html += `<div style="display:flex;justify-content:center;gap:20px;margin-bottom:16px">
+          <div style="text-align:center"><div style="font-size:24px;font-weight:800;color:var(--pitch)">${p.total_goals}</div><div class="text-xs text-muted">Голов</div></div>
+          <div style="text-align:center"><div style="font-size:24px;font-weight:800;color:var(--accent)">${p.total_assists}</div><div class="text-xs text-muted">Ассистов</div></div>
+          <div style="text-align:center"><div style="font-size:24px;font-weight:800;color:var(--muted)">${p.matches_played}</div><div class="text-xs text-muted">Матчей</div></div>
+        </div>`;
+        if (p.match_log && p.match_log.length > 0) {
+          html += `<div style="border-top:1px solid var(--border);padding-top:12px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">История матчей</div>`;
+          p.match_log.forEach(ml => {
+            const resBg = ml.result === 'В' ? 'var(--win)' : ml.result === 'П' ? 'var(--loss-bg)' : 'var(--draw)';
+            const resColor = ml.result === 'В' ? 'var(--win-text)' : ml.result === 'П' ? 'var(--danger)' : 'var(--draw-text)';
+            let details = [];
+            if (ml.goals > 0) details.push(`⚽ ${ml.goals}${ml.goal_minutes.length ? ' ('+ml.goal_minutes.map(m=>m+"'").join(', ')+')' : ''}`);
+            if (ml.assists > 0) details.push(`👟 ${ml.assists}${ml.assist_minutes.length ? ' ('+ml.assist_minutes.map(m=>m+"'").join(', ')+')' : ''}`);
+            html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+              <span class="badge" style="background:${resBg};color:${resColor};min-width:20px;text-align:center">${ml.result}</span>
+              <span style="font-weight:600;flex:1">vs ${escHtml(ml.opponent)}</span>
+              <span class="text-muted">${ml.score}</span>
+              ${ml.date ? `<span class="text-xs text-muted">${ml.date}</span>` : ''}
+            </div>`;
+            if (details.length) {
+              html += `<div style="padding:2px 0 4px 32px;font-size:12px;color:var(--muted)">${details.join(' ')}</div>`;
+            }
+          });
+          html += `</div>`;
+        }
+        document.getElementById("modal-title").textContent = p.full_name;
+        document.getElementById("modal-body").innerHTML = html;
+        document.getElementById("match-modal").classList.remove("hidden");
+      } catch (e) { showToast("Не удалось загрузить карточку игрока", true); }
+    }
+
+    /* ── Team Card ── */
+    async function openTeamCard(teamId) {
+      try {
+        const t = await API.get(`/api/teams/${teamId}/stats`);
+        if (!t) return;
+        const teamPlayers = players.filter(p => p.team_id === teamId);
+
+        let html = `<div style="text-align:center;margin-bottom:16px">
+          ${t.logo ? `<img src="${t.logo}" class="team-logo-lg" style="margin-bottom:8px">` : ''}
+          <div style="font-size:22px;font-weight:800">${escHtml(t.name)}</div>
+          <div class="text-sm text-muted">${escHtml(t.group_name)}</div>
+        </div>`;
+        // Stats
+        html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;text-align:center">
+          <div style="padding:8px;background:var(--pitch-light);border-radius:8px"><div style="font-size:20px;font-weight:800;color:var(--pitch)">${t.wins}</div><div class="text-xs text-muted">Побед</div></div>
+          <div style="padding:8px;background:var(--draw);border-radius:8px"><div style="font-size:20px;font-weight:800;color:var(--draw-text)">${t.draws}</div><div class="text-xs text-muted">Ничьих</div></div>
+          <div style="padding:8px;background:var(--loss-bg);border-radius:8px"><div style="font-size:20px;font-weight:800;color:var(--danger)">${t.losses}</div><div class="text-xs text-muted">Поражений</div></div>
+        </div>`;
+        html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;text-align:center">
+          <div><div style="font-size:18px;font-weight:700;color:var(--pitch)">${t.goals_for}</div><div class="text-xs text-muted">Забито</div></div>
+          <div><div style="font-size:18px;font-weight:700;color:var(--danger)">${t.goals_against}</div><div class="text-xs text-muted">Пропущено</div></div>
+          <div><div style="font-size:18px;font-weight:700;color:${t.goal_diff>=0?'var(--pitch)':'var(--danger)'}">${t.goal_diff>0?'+':''}${t.goal_diff}</div><div class="text-xs text-muted">Разница</div></div>
+        </div>`;
+        html += `<div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px;flex-wrap:wrap">
+          <span class="badge badge-pitch">Ср. забито: ${t.avg_scored}</span>
+          <span class="badge" style="background:var(--loss-bg);color:var(--danger)">Ср. пропущено: ${t.avg_conceded}</span>
+          ${t.current_streak ? `<span class="badge badge-accent">${t.current_streak}</span>` : ''}
+        </div>`;
+        if (t.top_scorer || t.top_assist) {
+          html += `<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">`;
+          if (t.top_scorer) html += `<div style="flex:1;padding:8px 12px;background:var(--pitch-light);border-radius:8px;cursor:pointer" onclick="openPlayerCard(${t.top_scorer.id})">
+            <div class="text-xs text-muted">Лучший бомбардир</div><div style="font-weight:700">⚽ ${escHtml(t.top_scorer.name)} (${t.top_scorer.goals})</div></div>`;
+          if (t.top_assist) html += `<div style="flex:1;padding:8px 12px;background:var(--accent-light);border-radius:8px;cursor:pointer" onclick="openPlayerCard(${t.top_assist.id})">
+            <div class="text-xs text-muted">Лучший ассистент</div><div style="font-weight:700">👟 ${escHtml(t.top_assist.name)} (${t.top_assist.assists})</div></div>`;
+          html += `</div>`;
+        }
+
+        // Toggle buttons for date tables
+        if (t.dates && t.dates.length > 0 && t.players_list) {
+          html += `<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('tc-goals').classList.toggle('hidden')">⚽ Бомбардиры по датам</button>
+            <button class="btn btn-accent btn-sm" onclick="document.getElementById('tc-assists').classList.toggle('hidden')">👟 Ассистенты по датам</button>
+            <a class="btn btn-ghost btn-sm" href="/api/export/team-stats/${teamId}?type=goal" download>📥 ⚽ Excel</a>
+            <a class="btn btn-ghost btn-sm" href="/api/export/team-stats/${teamId}?type=assist" download>📥 👟 Excel</a>
+          </div>`;
+
+          function buildDateTable(dataMap, playersList, dates) {
+            const playersWithData = playersList.filter(p => dataMap[String(p.id)]);
+            if (playersWithData.length === 0) return '<div class="text-xs text-muted">Нет данных</div>';
+            playersWithData.sort((a, b) => {
+              const totalA = Object.values(dataMap[String(a.id)] || {}).reduce((s, v) => s + v, 0);
+              const totalB = Object.values(dataMap[String(b.id)] || {}).reduce((s, v) => s + v, 0);
+              return totalB - totalA;
+            });
+            const cs = "padding:5px 7px;border:1px solid var(--border);font-size:12px;text-align:center;";
+            let h = `<div class="overflow-x"><table style="border-collapse:collapse;width:100%"><tr>
+              <th style="${cs}background:var(--pitch-light);text-align:left;font-weight:700;">Игрок</th>
+              <th style="${cs}background:var(--pitch);color:#fff;font-weight:800;">Σ</th>`;
+            dates.forEach(d => { h += `<th style="${cs}background:var(--pitch-light);font-weight:700;font-size:11px;">${d}</th>`; });
+            h += `</tr>`;
+            playersWithData.forEach((p, i) => {
+              const pData = dataMap[String(p.id)] || {};
+              const total = Object.values(pData).reduce((s, v) => s + v, 0);
+              const bg = i % 2 === 0 ? 'var(--surface)' : 'var(--surface-hover)';
+              h += `<tr style="background:${bg}">
+                <td style="${cs}text-align:left;font-weight:600;white-space:nowrap;cursor:pointer" onclick="openPlayerCard(${p.id})">${p.number != null ? '#'+p.number+' ' : ''}${escHtml(p.name)}</td>
+                <td style="${cs}font-weight:900;color:var(--pitch);background:var(--pitch-light)">${total}</td>`;
+              dates.forEach(d => {
+                const val = pData[d] || 0;
+                h += `<td style="${cs}${val > 0 ? 'font-weight:800;color:var(--pitch);' : 'color:var(--muted);'}">${val || '—'}</td>`;
+              });
+              h += `</tr>`;
+            });
+            h += `</table></div>`;
+            return h;
+          }
+
+          html += `<div id="tc-goals" class="hidden" style="margin-bottom:12px">${buildDateTable(t.goals_by_date, t.players_list, t.dates)}</div>`;
+          html += `<div id="tc-assists" class="hidden" style="margin-bottom:12px">${buildDateTable(t.assists_by_date, t.players_list, t.dates)}</div>`;
+        }
+
+        // Match log
+        if (t.match_log && t.match_log.length > 0) {
+          html += `<div style="border-top:1px solid var(--border);padding-top:12px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">История матчей</div>`;
+          t.match_log.forEach(ml => {
+            const resBg = ml.result === 'В' ? 'var(--win)' : ml.result === 'П' ? 'var(--loss-bg)' : 'var(--draw)';
+            const resColor = ml.result === 'В' ? 'var(--win-text)' : ml.result === 'П' ? 'var(--danger)' : 'var(--draw-text)';
+            html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+              <span class="badge" style="background:${resBg};color:${resColor};min-width:20px;text-align:center">${ml.result}</span>
+              <span style="font-weight:600;flex:1;cursor:pointer;color:var(--pitch)" onclick="openTeamCard(${ml.opponent_id})">vs ${escHtml(ml.opponent)}</span>
+              <span class="text-muted">${ml.score}</span>
+              ${ml.date ? `<span class="text-xs text-muted">${ml.date}</span>` : ''}
+            </div>`;
+          });
+          html += `</div>`;
+        }
+        // Roster
+        if (teamPlayers.length > 0) {
+          html += `<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Состав (${teamPlayers.length})</div>`;
+          teamPlayers.forEach(p => {
+            html += `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openPlayerCard(${p.id})">
+              ${p.number != null ? `<span class="badge badge-pitch" style="min-width:28px;text-align:center">#${p.number}</span>` : `<span style="min-width:28px"></span>`}
+              <span style="font-weight:600;font-size:13px">${escHtml(p.full_name)}</span>
+            </div>`;
+          });
+          html += `</div>`;
+        }
+
+        document.getElementById("modal-title").textContent = t.name;
+        document.getElementById("modal-body").innerHTML = html;
+        const modal = document.querySelector("#match-modal .modal");
+        modal.style.maxWidth = "600px";
+        document.getElementById("match-modal").classList.remove("hidden");
+      } catch (e) { showToast("Не удалось загрузить карточку команды", true); }
+    }
+
     /* ── Teams management ── */
     function renderTeamsList() {
       document.getElementById("teams-list").innerHTML = teams.map(t => `
         <div class="flex items-center justify-between" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:4px">
-          <span><strong>${escHtml(t.name)}</strong> <span class="text-muted">(${escHtml(t.short_name)})</span></span>
-          <button class="btn btn-ghost btn-sm" style="color:var(--danger);border:none" onclick="delTeam(${t.id})">✕</button>
+          <div class="flex items-center gap-8" style="cursor:pointer" onclick="openTeamCard(${t.id})">
+            ${t.logo ? `<img src="${t.logo}" class="team-logo">` : `<span class="team-logo-placeholder">⚽</span>`}
+            <span><strong>${escHtml(t.name)}</strong> <span class="text-muted">(${escHtml(t.short_name)})</span></span>
+          </div>
+          <div class="flex gap-8">
+            <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Загрузить логотип">📷<input type="file" accept="image/*" style="display:none" onchange="uploadLogo(${t.id},this)"></label>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);border:none" onclick="delTeam(${t.id})">✕</button>
+          </div>
         </div>
       `).join("");
       // Update player team selector
       const sel = document.getElementById("p-team");
-      if (sel) sel.innerHTML = '<option value="">Команда...</option>' + teams.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join("");
+      if (sel) {
+        const availableTeams = API.user?.role === "coach" && coachTeamIds.length > 0
+          ? teams.filter(t => coachTeamIds.includes(t.id))
+          : teams;
+        sel.innerHTML = '<option value="">Команда...</option>' + availableTeams.map(t => `<option value="${t.id}">${escHtml(t.name)}</option>`).join("");
+      }
+    }
+
+    async function uploadLogo(teamId, input) {
+      const file = input.files[0];
+      if (!file) return;
+      if (file.size > 100000) { showToast("Файл слишком большой (макс 100КБ)", true); return; }
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          await API.put(`/api/teams/${teamId}/logo`, { logo: reader.result });
+          showToast("Логотип обновлён"); loadAll();
+        } catch (e) { showToast(e.message, true); }
+      };
+      reader.readAsDataURL(file);
     }
 
     async function addTeam() {
@@ -467,14 +783,19 @@
     /* ── Players management ── */
     function renderPlayersList() {
       const el = document.getElementById("players-list");
-      el.innerHTML = teams.map(t => {
+      const isCoach = API.user?.role === "coach";
+      const visibleTeams = isCoach && coachTeamIds.length > 0
+        ? teams.filter(t => coachTeamIds.includes(t.id))
+        : teams;
+      el.innerHTML = visibleTeams.map(t => {
         const tp = players.filter(p => p.team_id === t.id);
+        const canManage = !isCoach || coachTeamIds.includes(t.id);
         return `<div style="margin-bottom:10px">
-          <div class="text-xs font-bold" style="color:var(--pitch);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">${escHtml(t.name)}</div>
+          <div class="text-xs font-bold" style="color:var(--pitch);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;cursor:pointer" onclick="openTeamCard(${t.id})">${escHtml(t.name)}</div>
           ${tp.length === 0 ? '<div class="text-xs text-muted" style="margin-left:8px">Нет игроков</div>' :
             tp.map(p => `<div class="flex items-center justify-between" style="padding:3px 8px;font-size:13px">
-              <span>${p.number != null ? '<span class="badge badge-pitch" style="margin-right:6px">#'+p.number+'</span>' : ''}${escHtml(p.full_name)}</span>
-              <button onclick="delPlayer(${p.id})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px">✕</button>
+              <span style="cursor:pointer" onclick="openPlayerCard(${p.id})">${p.number != null ? '<span class="badge badge-pitch" style="margin-right:6px">#'+p.number+'</span>' : ''}${escHtml(p.full_name)}</span>
+              ${canManage ? `<button onclick="delPlayer(${p.id})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px">✕</button>` : ''}
             </div>`).join("")}
         </div>`;
       }).join("");
@@ -501,12 +822,231 @@
     function togglePanel(name) {
       const el = document.getElementById("panel-" + name);
       el.classList.toggle("hidden");
+      if (name === "stats" && !el.classList.contains("hidden")) {
+        // Populate match dropdown
+        const sel = document.getElementById("stats-match");
+        const playedMatches = matches.filter(m => m.status === "played");
+        sel.innerHTML = '<option value="">Выберите матч...</option>' + playedMatches.map(m =>
+          `<option value="${m.id}">${escHtml(m.team_a_name)} ${m.score_a}:${m.score_b} ${escHtml(m.team_b_name)}${m.match_date ? ' ('+m.match_date.split('T')[0]+')' : ''}</option>`
+        ).join("");
+      }
+    }
+
+    async function loadStatsPanel() {
+      const matchId = document.getElementById("stats-match").value;
+      const el = document.getElementById("stats-players");
+      if (!matchId) { el.innerHTML = ""; return; }
+
+      const m = matches.find(x => x.id == matchId);
+      if (!m) return;
+
+      // Get current events for this match
+      try {
+        const matchData = await API.get(`/api/matches/${matchId}`);
+        const events = matchData?.events || [];
+        const playersA = players.filter(p => p.team_id === m.team_a_id);
+        const playersB = players.filter(p => p.team_id === m.team_b_id);
+
+        function renderTeamStats(teamPlayers, teamName, teamEvents) {
+          let html = `<div style="font-size:12px;font-weight:800;color:var(--pitch);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px">${escHtml(teamName)}</div>`;
+          teamPlayers.forEach(p => {
+            const pGoals = teamEvents.filter(e => e.player_id === p.id && e.type === "goal");
+            const pAssists = teamEvents.filter(e => e.player_id === p.id && e.type === "assist");
+            html += `<div class="flex items-center justify-between" style="padding:6px 8px;border-bottom:1px solid var(--border)">
+              <span style="font-size:13px;cursor:pointer" onclick="openPlayerCard(${p.id})">
+                ${p.number != null ? '<span class="badge badge-pitch" style="margin-right:4px">#'+p.number+'</span>' : ''}
+                ${escHtml(p.full_name)}
+              </span>
+              <div class="flex items-center gap-12">
+                <div class="flex items-center gap-4">
+                  <button onclick="removeLastEvent(${matchId},${p.id},'goal')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--danger)">−</button>
+                  <span style="font-weight:800;min-width:20px;text-align:center">⚽ ${pGoals.length}</span>
+                  <button onclick="addQuickEvent(${matchId},${p.id},'goal')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--pitch)">+</button>
+                </div>
+                <div class="flex items-center gap-4">
+                  <button onclick="removeLastEvent(${matchId},${p.id},'assist')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--danger)">−</button>
+                  <span style="font-weight:800;min-width:20px;text-align:center">👟 ${pAssists.length}</span>
+                  <button onclick="addQuickEvent(${matchId},${p.id},'assist')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--pitch)">+</button>
+                </div>
+              </div>
+            </div>`;
+          });
+          return html;
+        }
+
+        el.innerHTML = renderTeamStats(playersA, m.team_a_name, events) + renderTeamStats(playersB, m.team_b_name, events);
+      } catch (e) { el.innerHTML = '<div class="text-sm text-muted">Ошибка загрузки</div>'; }
+    }
+
+    async function addQuickEvent(matchId, playerId, type) {
+      try {
+        await API.post("/api/events/add", { match_id: matchId, player_id: playerId, type });
+        loadStatsPanel();
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    async function removeLastEvent(matchId, playerId, type) {
+      try {
+        const matchData = await API.get(`/api/matches/${matchId}`);
+        const events = (matchData?.events || []).filter(e => e.player_id === playerId && e.type === type);
+        if (events.length === 0) return;
+        const lastEvent = events[events.length - 1];
+        await API.del(`/api/events/${lastEvent.id}`);
+        loadStatsPanel();
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    /* ── Share ── */
+    function shareLink() {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+        showToast("Ссылка скопирована!");
+      }).catch(() => {
+        prompt("Скопируйте ссылку:", window.location.href);
+      });
+    }
+
+    /* ── Player Search ── */
+    let searchTimer = null;
+    function searchPlayers(q) {
+      clearTimeout(searchTimer);
+      const el = document.getElementById("search-results");
+      if (!q || q.length < 2) { el.style.display = "none"; return; }
+      searchTimer = setTimeout(async () => {
+        try {
+          const results = await API.get(`/api/players/search?q=${encodeURIComponent(q)}`);
+          if (!results || results.length === 0) {
+            el.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:13px">Игроков не найдено</div>';
+          } else {
+            el.innerHTML = results.map(r => `
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background='var(--pitch-light)'" onmouseout="this.style.background=''" onclick="document.getElementById('search-results').style.display='none';document.getElementById('player-search').value='';openPlayerCard(${r.id})">
+                ${r.number != null ? '<span class="badge badge-pitch">#'+r.number+'</span>' : ''}
+                <div style="flex:1"><div style="font-weight:600">${escHtml(r.full_name)}</div>
+                  <div class="text-xs text-muted">${escHtml(r.team_name)} · ${escHtml(r.group_name)}</div></div>
+              </div>
+            `).join("");
+          }
+          el.style.display = "block";
+        } catch (e) { el.style.display = "none"; }
+      }, 300);
+    }
+    document.addEventListener("click", e => {
+      const s = document.getElementById("player-search");
+      const r = document.getElementById("search-results");
+      if (s && r && !s.contains(e.target) && !r.contains(e.target)) r.style.display = "none";
+    });
+
+    /* ── Image Export ── */
+    let groupInfo = { name: "", birthYear: "" };
+
+    async function exportImage(type) {
+      showToast("Генерация картинки...");
+      const labels = { standings: "Турнирная таблица", crosstable: "Шахматка", gk: "Баттл вратарей", scorers: "Бомбардиры", assists: "Ассистенты" };
+      const container = document.createElement("div");
+      container.style.cssText = "position:fixed;left:-9999px;top:0;padding:24px;background:#fff;color:#1a1a1a;font-family:Inter,-apple-system,sans-serif;font-size:14px;min-width:600px;max-width:800px;";
+      // Header
+      container.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #2d6a30">
+        <div><div style="font-size:22px;font-weight:800;color:#2d6a30">⚽ Савося</div>
+          <div style="font-size:13px;color:#6b7280">${escHtml(groupInfo.name)} · ${groupInfo.birthYear} г.р.</div></div>
+        <div style="font-size:18px;font-weight:700;color:#1a1a1a">${labels[type] || type}</div>
+      </div>`;
+      // Build table content
+      try {
+        let tableHtml = "";
+        const cellStyle = "padding:6px 10px;border:1px solid #dde0d6;font-size:12px;";
+        const thStyle = cellStyle + "background:#2d6a30;color:#fff;font-weight:700;text-align:center;font-size:11px;";
+        const tdC = cellStyle + "text-align:center;";
+
+        if (type === "standings") {
+          const rows = await API.get(`/api/standings?group_id=${GROUP_ID}`);
+          tableHtml = `<table style="width:100%;border-collapse:collapse"><tr>
+            <th style="${thStyle}">#</th><th style="${thStyle}text-align:left;">Команда</th><th style="${thStyle}">И</th><th style="${thStyle}">В</th><th style="${thStyle}">Н</th><th style="${thStyle}">П</th><th style="${thStyle}">ГЗ</th><th style="${thStyle}">ГП</th><th style="${thStyle}">РМ</th><th style="${thStyle}font-weight:900;">О</th></tr>`;
+          (rows||[]).forEach((r, i) => {
+            const bg = i === 0 ? "#e8f0e8" : i % 2 === 0 ? "#fff" : "#f8f9f6";
+            tableHtml += `<tr style="background:${bg}"><td style="${tdC}font-weight:700;color:#6b7280">${r.position}</td><td style="${cellStyle}font-weight:600;">${escHtml(r.team_name)}</td><td style="${tdC}">${r.mp}</td><td style="${tdC}">${r.w}</td><td style="${tdC}">${r.d}</td><td style="${tdC}">${r.l}</td><td style="${tdC}">${r.gf}</td><td style="${tdC}">${r.ga}</td><td style="${tdC}font-weight:600;color:${r.gd>0?'#2d6a30':r.gd<0?'#c0392b':'#6b7280'}">${r.gd>0?'+':''}${r.gd}</td><td style="${tdC}font-weight:800;font-size:15px;color:#2d6a30">${r.pts}</td></tr>`;
+          });
+          tableHtml += "</table>";
+        } else if (type === "crosstable") {
+          const data = await API.get(`/api/crosstable?group_id=${GROUP_ID}`);
+          const ct = data.teams, mx = data.matrix;
+          tableHtml = `<table style="border-collapse:collapse"><tr><th style="${thStyle}text-align:left;">Команда</th>${ct.map(t => `<th style="${thStyle}">${escHtml(t.short_name)}</th>`).join("")}</tr>`;
+          ct.forEach(row => {
+            tableHtml += `<tr><td style="${cellStyle}font-weight:600;white-space:nowrap">${escHtml(row.name)}</td>`;
+            ct.forEach(col => {
+              if (row.id === col.id) { tableHtml += `<td style="${tdC}background:#e5e7eb">—</td>`; }
+              else {
+                const scores = mx[String(row.id)]?.[String(col.id)];
+                let bg = "#fff";
+                if (scores?.length) { const [a,b] = scores[0].split(":").map(Number); bg = a>b?"#d4edda":a<b?"#fdecea":"#fff3cd"; }
+                tableHtml += `<td style="${tdC}background:${bg};font-weight:600">${scores?scores.join(", "):""}</td>`;
+              }
+            });
+            tableHtml += "</tr>";
+          });
+          tableHtml += "</table>";
+        } else if (type === "gk") {
+          const rows = await API.get(`/api/gk-standings?group_id=${GROUP_ID}`);
+          tableHtml = `<table style="width:100%;border-collapse:collapse"><tr><th style="${thStyle}">#</th><th style="${thStyle}text-align:left;">Команда</th><th style="${thStyle}">Б</th><th style="${thStyle}">В</th><th style="${thStyle}">Н</th><th style="${thStyle}">П</th><th style="${thStyle}">ЗБ</th><th style="${thStyle}">ПР</th><th style="${thStyle}font-weight:900;">Очки</th></tr>`;
+          (rows||[]).forEach((r, i) => {
+            const bg = i === 0 ? "#fff3e0" : i % 2 === 0 ? "#fff" : "#f8f9f6";
+            tableHtml += `<tr style="background:${bg}"><td style="${tdC}font-weight:700;color:#6b7280">${r.position}</td><td style="${cellStyle}font-weight:600;">${escHtml(r.team_name)}</td><td style="${tdC}">${r.battles}</td><td style="${tdC}">${r.wins}</td><td style="${tdC}">${r.draws}</td><td style="${tdC}">${r.losses}</td><td style="${tdC}">${r.gk_gf}</td><td style="${tdC}">${r.gk_ga}</td><td style="${tdC}font-weight:800;font-size:15px;color:#d4760a">${r.gk_pts}</td></tr>`;
+          });
+          tableHtml += "</table>";
+        } else if (type === "scorers" || type === "assists") {
+          const ltype = type === "scorers" ? "goal" : "assist";
+          const label = type === "scorers" ? "Голы" : "Ассисты";
+          const rows = await API.get(`/api/leaderboard?group_id=${GROUP_ID}&type=${ltype}`);
+          tableHtml = `<table style="width:100%;border-collapse:collapse"><tr><th style="${thStyle}">#</th><th style="${thStyle}text-align:left;">Игрок</th><th style="${thStyle}">Команда</th><th style="${thStyle}">№</th><th style="${thStyle}font-weight:900;">${label}</th></tr>`;
+          (rows||[]).forEach((r, i) => {
+            const bg = i === 0 ? "#fff3e0" : i % 2 === 0 ? "#fff" : "#f8f9f6";
+            tableHtml += `<tr style="background:${bg}"><td style="${tdC}font-weight:700;color:${i<3?'#d4760a':'#6b7280'}">${r.position}</td><td style="${cellStyle}font-weight:600;">${escHtml(r.player_name)}</td><td style="${tdC}">${escHtml(r.team_name)}</td><td style="${tdC}">${r.number!=null?r.number:''}</td><td style="${tdC}font-weight:800;font-size:15px;color:#2d6a30">${r.count}</td></tr>`;
+          });
+          tableHtml += "</table>";
+        }
+        container.innerHTML += tableHtml;
+        // Footer
+        document.body.appendChild(container);
+        const canvas = await html2canvas(container, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+        document.body.removeChild(container);
+        const link = document.createElement("a");
+        link.download = `${type}_${groupInfo.name}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        showToast("Картинка скачана!");
+      } catch (e) {
+        if (container.parentNode) document.body.removeChild(container);
+        showToast("Ошибка генерации: " + e.message, true);
+      }
     }
 
     /* ── Init ── */
     updateAuthUI();
-    if (API.isLoggedIn()) document.getElementById("admin-btns").classList.remove("hidden");
-    loadAll();
+    let coachTeamIds = [];
+    (async function() {
+      if (API.isLoggedIn()) {
+        const role = API.user?.role;
+        if (role === "admin" || role === "editor") {
+          document.getElementById("admin-btns").classList.remove("hidden");
+        } else if (role === "coach") {
+          document.getElementById("admin-btns").classList.remove("hidden");
+          document.getElementById("admin-btns").innerHTML = '<button class="btn btn-primary btn-sm" onclick="togglePanel(\'players\')">Игроки</button>';
+          try {
+            coachTeamIds = await API.get("/api/users/me/teams") || [];
+          } catch (e) {}
+        }
+        const be = document.getElementById("btn-export");
+        const bi = document.getElementById("btn-images");
+        if (be) be.classList.remove("hidden");
+        if (bi) bi.classList.remove("hidden");
+      }
+      // Set export links
+      document.getElementById("exp-standings").href = `/api/export/standings?group_id=${GROUP_ID}`;
+      document.getElementById("exp-crosstable").href = `/api/export/crosstable?group_id=${GROUP_ID}`;
+      document.getElementById("exp-matches").href = `/api/export/matches?group_id=${GROUP_ID}`;
+      document.getElementById("exp-scorers").href = `/api/export/scorers?group_id=${GROUP_ID}`;
+      document.getElementById("exp-assists").href = `/api/export/assists?group_id=${GROUP_ID}`;
+      document.getElementById("exp-players").href = `/api/export/players?group_id=${GROUP_ID}`;
+      loadAll();
+    })();
   </script>
 </body>
 </html>
