@@ -14,21 +14,25 @@
     <div class="header-actions" id="auth-area"></div>
   </div>
 
-  <div class="container">
+<div class="container">
     <!-- Title bar -->
     <div class="flex items-center gap-12 mb-16 flex-wrap">
       <a href="/" class="btn btn-ghost btn-sm" style="text-decoration:none">← Назад</a>
-      <div style="flex:1">
+      <div style="flex:1; min-width: 200px;">
         <h2 id="group-title" style="font-size:20px;font-weight:800;margin:0"></h2>
         <span id="group-subtitle" class="text-sm text-muted"></span>
       </div>
-      <div id="admin-btns" class="hidden flex gap-8">
+      
+      <!-- Кнопки видны всем -->
+      <div class="flex gap-8 flex-wrap">
+        <button class="btn btn-ghost btn-sm" onclick="shareLink()" title="Скопировать ссылку">🔗 Поделиться</button>
+      </div>
+      
+      <!-- Кнопки только для редакторов, тренеров и админов -->
+      <div id="editorControls" class="hidden flex gap-8 flex-wrap">
         <button class="btn btn-primary btn-sm" onclick="togglePanel('teams')">Команды</button>
         <button class="btn btn-primary btn-sm" onclick="togglePanel('players')">Игроки</button>
         <button class="btn btn-accent btn-sm" onclick="togglePanel('stats')">📊 Статистика</button>
-      </div>
-      <div class="flex gap-8 flex-wrap">
-        <button class="btn btn-ghost btn-sm" onclick="shareLink()" title="Скопировать ссылку">🔗 Поделиться</button>
         <button class="btn btn-ghost btn-sm" onclick="togglePanel('export')" title="Экспорт в Excel">📥 Excel</button>
         <button class="btn btn-ghost btn-sm" onclick="togglePanel('images')" title="Картинки для соцсетей">📸 Картинки</button>
       </div>

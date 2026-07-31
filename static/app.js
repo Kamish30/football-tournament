@@ -200,3 +200,24 @@ function escHtml(s) {
   d.textContent = s;
   return d.innerHTML;
 }
+
+
+/* ── Role-based UI Controls ── */
+function initEditorControls() {
+    const user = API.user;
+    const allowedRoles = ['admin', 'editor', 'coach'];
+    
+    if (user && allowedRoles.includes(user.role)) {
+        const editorControls = document.getElementById('editorControls');
+        if (editorControls) {
+            editorControls.classList.remove('hidden');
+        }
+    }
+}
+
+// Инициализация при загрузке страницы
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initEditorControls);
+} else {
+    initEditorControls();
+}
