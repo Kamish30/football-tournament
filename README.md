@@ -74,3 +74,4 @@ tournament/
 - **Backend:** Python 3.13, FastAPI, SQLAlchemy, SQLite (WAL-режим)
 - **Frontend:** Vanilla JS, CSS (Inter)
 - **Авторизация:** JWT токены (PBKDF2 + HMAC-SHA256, 72 часа)
+- **Деплой:** TimeWeb Cloud (настройка домена savosya-football.ru, SSL-сертификат)
