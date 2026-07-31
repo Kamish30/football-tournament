@@ -59,7 +59,6 @@ tournament/
 ├── auth.py               # Авторизация (JWT, хеширование паролей)
 ├── schemas.py            # Валидация данных (Pydantic)
 ├── requirements.txt      # Python зависимости
-├── Procfile               # Команда запуска для Railway
 ├── static/
 │   ├── style.css          # Стили (голубая тема, тёмная тема, адаптив)
 │   ├── app.js             # API-клиент, авторизация, тема
