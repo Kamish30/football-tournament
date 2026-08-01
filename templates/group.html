@@ -1028,27 +1028,32 @@
     (async function() {
       if (API.isLoggedIn()) {
         const role = API.user?.role;
-        if (role === "admin" || role === "editor") {
-          document.getElementById("admin-btns").classList.remove("hidden");
-        } else if (role === "coach") {
-          document.getElementById("admin-btns").classList.remove("hidden");
-          document.getElementById("admin-btns").innerHTML = '<button class="btn btn-primary btn-sm" onclick="togglePanel(\'players\')">Игроки</button>';
+        
+        // Удален битый код, обращавшийся к несуществующему id="admin-btns"
+        // Кнопки редактора уже корректно показываются через initEditorControls() в app.js
+        
+        if (role === "coach") {
           try {
             coachTeamIds = await API.get("/api/users/me/teams") || [];
           } catch (e) {}
         }
+        
+        // Безопасная проверка для кнопок экспорта (они есть в панели export)
         const be = document.getElementById("btn-export");
         const bi = document.getElementById("btn-images");
         if (be) be.classList.remove("hidden");
         if (bi) bi.classList.remove("hidden");
       }
-      // Set export links
+      
+      // Установка ссылок на экспорт
       document.getElementById("exp-standings").href = `/api/export/standings?group_id=${GROUP_ID}`;
       document.getElementById("exp-crosstable").href = `/api/export/crosstable?group_id=${GROUP_ID}`;
       document.getElementById("exp-matches").href = `/api/export/matches?group_id=${GROUP_ID}`;
       document.getElementById("exp-scorers").href = `/api/export/scorers?group_id=${GROUP_ID}`;
       document.getElementById("exp-assists").href = `/api/export/assists?group_id=${GROUP_ID}`;
       document.getElementById("exp-players").href = `/api/export/players?group_id=${GROUP_ID}`;
+      
+      // Теперь эта функция гарантированно выполнится и загрузит матчи для всех
       loadAll();
     })();
   </script>
