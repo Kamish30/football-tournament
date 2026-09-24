@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
   <title>Группа — Савося</title>
+  <meta property="og:title" content="Савося - Футбольный турнир">
+  <meta property="og:description" content="Результаты, таблицы, статистика и расписание матчей.">
+  <meta property="og:type" content="website">
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
@@ -756,7 +759,7 @@
     async function uploadLogo(teamId, input) {
       const file = input.files[0];
       if (!file) return;
-      if (file.size > 100000) { showToast("Файл слишком большой (макс 100КБ)", true); return; }
+      if (file.size > 512000) { showToast("Файл слишком большой (макс 500КБ)", true); return; }
       const reader = new FileReader();
       reader.onload = async () => {
         try {

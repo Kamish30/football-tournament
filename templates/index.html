@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
   <title>Савося</title>
+  <meta property="og:title" content="Савося - Футбольный турнир">
+  <meta property="og:description" content="Результаты, таблицы, статистика и расписание матчей.">
+  <meta property="og:type" content="website">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -62,6 +65,11 @@
           <button class="btn btn-primary" onclick="addUser()">+ Добавить</button>
         </div>
         <div id="users-list"></div>
+      </div>
+      <div class="card" id="editors-coach-panel" style="display:none">
+        <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">Назначение команд тренерам</h3>
+        <p class="text-sm text-muted mb-8">Выберите тренера, чтобы закрепить за ним команды.</p>
+        <div id="coaches-list"></div>
       </div>
       <div class="card" id="backup-panel" style="display:none">
         <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">💾 Резервная копия</h3>
@@ -162,6 +170,26 @@
         }).join("");
       } catch {}
     }
+    async function loadCoachesForEditors() {
+      try {
+        const coaches = await API.get("/api/users/coaches");
+        document.getElementById("coaches-list").innerHTML = (coaches || []).map(u => {
+          const coachInfo = u.coach_teams && u.coach_teams.length > 0
+            ? `<div class="text-xs" style="margin-top:4px;color:var(--pitch)">Команды: ${u.coach_teams.map(ct => ct.team_name + ' (' + ct.group_name + ')').join(', ')}</div>`
+            : '<div class="text-xs" style="margin-top:4px;color:var(--danger)">Нет назначенных команд</div>';
+          
+          return `<div style="padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">
+            <div class="flex items-center justify-between">
+              <div>
+                <strong>${escHtml(u.display_name)}</strong>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="editCoachTeams(${u.id},'${escHtml(u.display_name)}')">⚽ Назначить команды</button>
+            </div>
+            ${coachInfo}
+          </div>`;
+        }).join("");
+      } catch {}
+    }
 
     async function editCoachTeams(userId, displayName) {
       const groups = await API.get("/api/groups");
@@ -211,7 +239,11 @@
         await API.put(`/api/users/${userId}/teams`, { team_ids: teamIds });
         document.getElementById("coach-modal").remove();
         showToast("Команды назначены");
-        loadUsers();
+        if (API.user?.role === "admin") {
+            loadUsers();
+        } else {
+            loadCoachesForEditors();
+        }
       } catch (e) { showToast(e.message, true); }
     }
 
@@ -420,10 +452,16 @@
       const role = API.user?.role;
       if (role === "admin" || role === "editor") {
         document.getElementById("admin-panel").classList.remove("hidden");
+        
         if (role === "admin") {
+          // Админ видит полную панель пользователей и бэкапы
           document.getElementById("users-panel").style.display = "block";
           document.getElementById("backup-panel").style.display = "block";
           loadUsers();
+        } else if (role === "editor") {
+          // Редактор видит только панель назначения команд тренерам
+          document.getElementById("editors-coach-panel").style.display = "block";
+          loadCoachesForEditors();
         }
       } else if (role === "coach") {
         document.getElementById("coach-panel").classList.remove("hidden");

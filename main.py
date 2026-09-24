@@ -94,9 +94,27 @@ def list_users(db: Session = Depends(get_db), me=Depends(get_current_user)):
         result.append({"id": u.id, "username": u.username, "display_name": u.display_name, "role": u.role, "coach_teams": coach_teams})
     return result
 
+@app.get("/api/users/coaches")
+def list_coaches(db: Session = Depends(get_db), me=Depends(get_current_user)):
+    if me["role"] not in ("admin", "editor"):
+        raise HTTPException(403, "Нет доступа")
+    # Получаем только пользователей с ролью 'coach'
+    coaches = db.query(User).filter_by(role="coach").all()
+    result = []
+    for u in coaches:
+        coach_teams = []
+        ct = db.query(CoachTeam).filter_by(user_id=u.id).all()
+        for c in ct:
+            t = db.query(Team).get(c.team_id)
+            if t:
+                g = db.query(Group).get(t.group_id)
+                coach_teams.append({"team_id": t.id, "team_name": t.name, "group_name": g.name if g else "?"})
+        result.append({"id": u.id, "username": u.username, "display_name": u.display_name, "role": u.role, "coach_teams": coach_teams})
+    return result
+
 @app.put("/api/users/{user_id}/teams")
 def set_coach_teams(user_id: int, data: dict, db: Session = Depends(get_db), me=Depends(get_current_user)):
-    if me["role"] != "admin":
+    if me["role"] not in ("admin", "editor"):
         raise HTTPException(403, "Нет доступа")
     user = db.query(User).get(user_id)
     if not user:
@@ -932,8 +950,8 @@ def upload_logo(team_id: int, data: dict, db: Session = Depends(get_db), me=Depe
     if logo_data and not logo_data.startswith("data:image/"):
         raise HTTPException(400, "Неверный формат изображения")
     # Limit size ~100KB base64
-    if len(logo_data) > 150000:
-        raise HTTPException(400, "Логотип слишком большой (максимум ~100КБ)")
+    if len(logo_data) > 750000:
+        raise HTTPException(400, "Логотип слишком большой (максимум 500КБ)")
     t.logo = logo_data if logo_data else None
     db.commit()
     return {"ok": True}
