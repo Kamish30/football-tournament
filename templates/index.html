@@ -192,7 +192,7 @@
     }
 
     async function editCoachTeams(userId, displayName) {
-      const groups = await API.get("/api/groups");
+      const users = await API.get("/api/users/coaches");
       const allTeams = [];
       for (const g of (groups || [])) {
         const t = await API.get(`/api/teams?group_id=${g.id}`);
