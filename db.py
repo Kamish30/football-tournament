@@ -8,11 +8,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-# Use /data/ for Railway Volume, fallback to local file
-DATA_DIR = os.getenv("DATA_DIR", ".")
-os.makedirs(DATA_DIR, exist_ok=True)
-DB_PATH = os.path.join(DATA_DIR, "tournament.db")
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
+# Подключение к Turso Cloud через переменную окружения или fallback на локальный файл
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///tournament.db")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 # Enable WAL mode for better concurrent reads
