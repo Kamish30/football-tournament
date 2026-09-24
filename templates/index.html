@@ -192,15 +192,16 @@
     }
 
     async function editCoachTeams(userId, displayName) {
-      const users = await API.get("/api/users/coaches");
       const allTeams = [];
       for (const g of (groups || [])) {
         const t = await API.get(`/api/teams?group_id=${g.id}`);
         (t || []).forEach(team => allTeams.push({ ...team, groupName: g.name }));
       }
-      const users = await API.get("/api/users");
-      const user = (users || []).find(u => u.id === userId);
-      const assigned = new Set((user?.coach_teams || []).map(ct => ct.team_id));
+      
+      // Запрашиваем актуальный список тренеров с их командами
+      const coaches = await API.get("/api/users/coaches");
+      const coach = (coaches || []).find(u => u.id === userId);
+      const assigned = new Set((coach?.coach_teams || []).map(ct => ct.team_id));
 
       let overlay = document.getElementById("coach-modal");
       if (overlay) overlay.remove();
