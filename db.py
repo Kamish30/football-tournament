@@ -15,10 +15,15 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 # Enable WAL mode for better concurrent reads
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
-    cursor = dbapi_conn.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=5000")
-    cursor.close()
+    # Применяем прагмы только для локального файла, для облачного Turso они не нужны и вызывают ошибку
+    if "libsql" not in str(engine.url):
+        try:
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.close()
+        except Exception:
+            pass
 
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
