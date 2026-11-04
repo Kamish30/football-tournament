@@ -1062,7 +1062,7 @@ def search_players(q: str = "", db: Session = Depends(get_db)):
         "group_name": p.team.group.name, "group_id": p.team.group.id,
     } for p in results]
 
-
+#
 # ── Database Backup ──────────────────────────────────────────
 
 @app.get("/api/backup")
