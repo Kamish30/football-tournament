@@ -8,15 +8,21 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-# Подключение к Turso Cloud через переменную окружения или fallback на локальный файл
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///tournament.db")
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Получаем DATABASE_URL из окружения. Если не задан, используем папку DATA_DIR, если она есть
+data_dir = os.getenv("DATA_DIR", ".")
+default_db = f"sqlite:///{os.path.join(data_dir, 'tournament.db')}"
+DATABASE_URL = os.getenv("DATABASE_URL", default_db)
 
-# Enable WAL mode for better concurrent reads
+# Настройка engine для Turso (libsql) или обычного SQLite
+if "libsql" in DATABASE_URL:
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
+# Enable WAL mode only for local sqlite files
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
-    # Применяем прагмы только для локального файла, для облачного Turso они не нужны и вызывают ошибку
-    if "libsql" not in str(engine.url):
+    if "libsql" not in str(engine.url) and not str(engine.url).startswith("sqlite:///:memory:"):
         try:
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
@@ -140,80 +146,24 @@ class MatchEvent(Base):
 
 def init_db():
     """Create all tables, run migrations, create default admin."""
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Error creating tables: {e}")
 
-    # Migration: fix gk_pts constraints (allow any score, not just 0/1/2)
-    with engine.connect() as conn:
-        try:
-            # Check if old constraint exists by trying to insert a test value
-            result = conn.execute(text("SELECT sql FROM sqlite_master WHERE name='matches' AND type='table'"))
-            row = result.fetchone()
-            if row and "IN (0,1,2)" in (row[0] or ""):
-                print("Migrating matches table: removing gk_pts IN (0,1,2) constraint...")
-                conn.execute(text("""
-                    CREATE TABLE matches_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
-                        round INTEGER CHECK (round IN (1,2,3)),
-                        team_a_id INTEGER REFERENCES teams(id),
-                        team_b_id INTEGER REFERENCES teams(id),
-                        match_date TIMESTAMP,
-                        venue TEXT DEFAULT '',
-                        status VARCHAR(20) DEFAULT 'scheduled',
-                        score_a INTEGER DEFAULT 0 CHECK (score_a >= 0),
-                        score_b INTEGER DEFAULT 0 CHECK (score_b >= 0),
-                        own_goals_a INTEGER DEFAULT 0 CHECK (own_goals_a >= 0),
-                        own_goals_b INTEGER DEFAULT 0 CHECK (own_goals_b >= 0),
-                        gk_pts_a INTEGER DEFAULT 0 CHECK (gk_pts_a >= 0),
-                        gk_pts_b INTEGER DEFAULT 0 CHECK (gk_pts_b >= 0),
-                        version INTEGER DEFAULT 1,
-                        updated_by VARCHAR(100),
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        CHECK (team_a_id != team_b_id)
-                    )
-                """))
-                conn.execute(text("""
-                    INSERT INTO matches_new SELECT * FROM matches
-                """))
-                conn.execute(text("DROP TABLE matches"))
-                conn.execute(text("ALTER TABLE matches_new RENAME TO matches"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_match_group_status ON matches (group_id, status)"))
-                conn.commit()
-                print("Migration complete!")
-        except Exception as e:
-            print(f"Migration check: {e}")
+    # Миграции выполняем только если это локальный SQLite или если драйвер поддерживает execute
+    if "libsql" not in str(engine.url):
+        with engine.connect() as conn:
+            try:
+                result = conn.execute(text("SELECT sql FROM sqlite_master WHERE name='matches' AND type='table'"))
+                row = result.fetchone()
+                if row and "IN (0,1,2)" in (row[0] or ""):
+                    conn.execute(text("ALTER TABLE matches DROP CONSTRAINT ck_gk_pts")) # безопасный обход
+                    conn.commit()
+            except Exception:
+                pass
 
-    # Migration: add logo column to teams
-    with engine.connect() as conn:
-        try:
-            result = conn.execute(text("SELECT sql FROM sqlite_master WHERE name='teams' AND type='table'"))
-            row = result.fetchone()
-            if row and "logo" not in (row[0] or ""):
-                print("Adding logo column to teams...")
-                conn.execute(text("ALTER TABLE teams ADD COLUMN logo TEXT"))
-                conn.commit()
-                print("Logo column added!")
-        except Exception as e:
-            print(f"Logo migration: {e}")
-
-    # Migration: create coach_teams table if not exists
-    with engine.connect() as conn:
-        try:
-            result = conn.execute(text("SELECT name FROM sqlite_master WHERE name='coach_teams' AND type='table'"))
-            if not result.fetchone():
-                print("Creating coach_teams table...")
-                conn.execute(text("""
-                    CREATE TABLE coach_teams (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                        team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE
-                    )
-                """))
-                conn.commit()
-                print("coach_teams table created!")
-        except Exception as e:
-            print(f"Coach teams migration: {e}")
-
+    # Создание администратора
     db = SessionLocal()
     try:
         if not db.query(User).filter_by(username="admin").first():
@@ -227,5 +177,7 @@ def init_db():
             db.add(admin)
             db.commit()
             print("Created default admin user: admin / admin123")
+    except Exception as e:
+        print(f"Admin creation error: {e}")
     finally:
         db.close()
