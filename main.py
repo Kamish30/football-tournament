@@ -20,6 +20,8 @@ from auth import (
     get_current_user, get_optional_user,
 )
 
+from pydantic import BaseModel
+
 app = FastAPI(title="Савося")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -1067,16 +1069,23 @@ def search_players(q: str = "", db: Session = Depends(get_db)):
 def download_backup(me=Depends(get_current_user)):
     if me["role"] != "admin":
         raise HTTPException(403, "Только администратор может скачать бэкап")
-    from db import DB_PATH
     import shutil
-    backup_path = DB_PATH + ".backup"
-    shutil.copy2(DB_PATH, backup_path)
+    import os
+    # Путь к локальной бд или временному файлу
+    db_file = "tournament.db"
+    if not os.path.exists(db_file):
+        raise HTTPException(404, "Локальный файл бд не найден (приложение работает в облаке Turso)")
+
+    backup_path = db_file + ".backup"
+    shutil.copy2(db_file, backup_path)
+
     def file_iter():
         with open(backup_path, "rb") as f:
             while chunk := f.read(8192):
                 yield chunk
-        import os
-        os.remove(backup_path)
+        if os.path.exists(backup_path):
+            os.remove(backup_path)
+
     return StreamingResponse(
         file_iter(), media_type="application/octet-stream",
         headers={"Content-Disposition": "attachment; filename=tournament_backup.db"},
