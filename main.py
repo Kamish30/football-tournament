@@ -54,6 +54,7 @@ def page_group(request: Request, identifier: str):
     return templates.TemplateResponse("group.html", {"request": request, "group_id": group_id})
 
 
+
 # ── Auth API ─────────────────────────────────────────────────
 
 @app.post("/api/login", response_model=LoginResponse)
@@ -220,6 +221,42 @@ def delete_group(group_id: int, db: Session = Depends(get_db), me=Depends(get_cu
     db.commit()
     return {"ok": True}
 
+class TeamUpdateSchema(BaseModel):
+    name: str | None = None
+    short_name: str | None = None
+
+class PlayerUpdateSchema(BaseModel):
+    full_name: str | None = None
+    number: int | None = None
+
+@app.put("/api/teams/{team_id}")
+def update_team(team_id: int, data: TeamUpdateSchema, db: Session = Depends(get_db), me=Depends(get_current_user)):
+    if me["role"] not in ("admin", "editor"):
+        raise HTTPException(403, "Нет доступа")
+    t = db.query(Team).get(team_id)
+    if not t:
+        raise HTTPException(404, "Команда не найдена")
+    if data.name is not None:
+        t.name = data.name.strip()
+    if data.short_name is not None:
+        t.short_name = data.short_name.strip()
+    db.commit()
+    return TeamOut(id=t.id, group_id=t.group_id, name=t.name, short_name=t.short_name, logo=t.logo)
+
+
+@app.put("/api/players/{player_id}")
+def update_player(player_id: int, data: PlayerUpdateSchema, db: Session = Depends(get_db), me=Depends(get_current_user)):
+    p = db.query(Player).get(player_id)
+    if not p:
+        raise HTTPException(404, "Игрок не найден")
+    if not can_manage_players(me, p.team_id, db):
+        raise HTTPException(403, "Нет доступа к этой команде")
+    if data.full_name is not None:
+        p.full_name = data.full_name.strip()
+    if data.number is not None:
+        p.number = data.number
+    db.commit()
+    return {"id": p.id, "full_name": p.full_name, "number": p.number}
 
 # ── Teams API ────────────────────────────────────────────────
 

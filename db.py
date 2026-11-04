@@ -58,7 +58,7 @@ class Team(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     group_id = Column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
-    short_name = Column(String(10), nullable=False)
+    short_name = Column(String(30), nullable=False)
     logo = Column(Text, nullable=True)  # base64 data URL
     group = relationship("Group", back_populates="teams")
     players = relationship("Player", back_populates="team", cascade="all, delete-orphan")
