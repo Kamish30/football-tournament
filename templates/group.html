@@ -139,6 +139,98 @@
 
   <script src="/static/app.js"></script>
   <script>
+    // Модальное окно редактирования команды
+    function editTeamModal(teamId, currentName, currentShort) {
+      let overlay = document.getElementById("edit-team-modal");
+      if (overlay) overlay.remove();
+      
+      overlay = document.createElement("div");
+      overlay.id = "edit-team-modal";
+      overlay.className = "modal-overlay";
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+      overlay.innerHTML = `
+        <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+          <div class="modal-header">
+            <h3>Редактировать команду</h3>
+            <button class="modal-close" onclick="document.getElementById('edit-team-modal').remove()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group" style="margin-bottom:12px">
+              <label>Полное название</label>
+              <input class="input" id="et-name" value="${escHtml(currentName)}">
+            </div>
+            <div class="form-group" style="margin-bottom:16px">
+              <label>Краткое название (до 30 символов)</label>
+              <input class="input" id="et-short" maxlength="30" value="${escHtml(currentShort)}">
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn btn-ghost" onclick="document.getElementById('edit-team-modal').remove()">Отмена</button>
+              <button class="btn btn-primary" onclick="saveTeam(${teamId})">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    async function saveTeam(teamId) {
+      const name = document.getElementById("et-name").value.trim();
+      const short_name = document.getElementById("et-short").value.trim();
+      if (!name || !short_name) return showToast("Заполните оба названия", true);
+      try {
+        await API.put(`/api/teams/${teamId}`, { name, short_name });
+        document.getElementById("edit-team-modal").remove();
+        showToast("Команда обновлена");
+        loadAll();
+      } catch (e) { showToast(e.message, true); }
+    }
+
+    // Модальное окно редактирования игрока
+    function editPlayerModal(playerId, currentName, currentNum) {
+      let overlay = document.getElementById("edit-player-modal");
+      if (overlay) overlay.remove();
+      
+      overlay = document.createElement("div");
+      overlay.id = "edit-player-modal";
+      overlay.className = "modal-overlay";
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+      overlay.innerHTML = `
+        <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+          <div class="modal-header">
+            <h3>Редактировать игрока</h3>
+            <button class="modal-close" onclick="document.getElementById('edit-player-modal').remove()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group" style="margin-bottom:12px">
+              <label>ФИО игрока</label>
+              <input class="input" id="ep-name" value="${escHtml(currentName)}">
+            </div>
+            <div class="form-group" style="margin-bottom:16px">
+              <label>Игровой номер</label>
+              <input class="input" id="ep-num" type="number" value="${currentNum !== null ? currentNum : ''}">
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn btn-ghost" onclick="document.getElementById('edit-player-modal').remove()">Отмена</button>
+              <button class="btn btn-primary" onclick="savePlayer(${playerId})">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    async function savePlayer(playerId) {
+      const full_name = document.getElementById("ep-name").value.trim();
+      const numVal = document.getElementById("ep-num").value;
+      const number = numVal ? parseInt(numVal) : null;
+      if (!full_name) return showToast("Введите ФИО игрока", true);
+      try {
+        await API.put(`/api/players/${playerId}`, { full_name, number });
+        document.getElementById("edit-player-modal").remove();
+        showToast("Игрок обновлен");
+        loadAll();
+      } catch (e) { showToast(e.message, true); }
+    }
     const GROUP_ID = {{ group_id }};
     let teams = [], players = [], matches = [], currentTab = "schedule";
 
@@ -544,7 +636,7 @@
     async function renderGk() {
       const rows = await API.get(`/api/gk-standings?group_id=${GROUP_ID}`);
       const el = document.getElementById("tab-gk");
-      if (!rows || rows.length === 0) { el.innerHTML = '<div class="empty">Нет данных по баттлам вратарей.</div>'; return; }
+      if (!rows || rows.length === 0) { el.innerHTML = '<div class="empty">Нет данных по батлам вратарей.</div>'; return; }
       el.innerHTML = `<div class="overflow-x"><table class="data-table"><thead><tr style="background:var(--accent-light)">
         <th class="center">#</th><th>Команда</th><th class="center">Б</th><th class="center">В</th><th class="center">Н</th><th class="center">П</th><th class="center">ЗБ</th><th class="center">ПР</th><th class="center" style="font-weight:800;color:var(--accent)">Очки</th>
       </tr></thead><tbody>${rows.map((r, i) => `<tr${i===0?' class="highlight"':''} style="${i===0?'background:var(--accent-light)':''}">
@@ -554,7 +646,7 @@
         <td class="center">${r.gk_gf}</td><td class="center">${r.gk_ga}</td>
         <td class="center" style="font-weight:800;font-size:15px;color:var(--accent)">${r.gk_pts}</td>
       </tr>`).join("")}</tbody></table></div>
-      <div class="text-xs text-muted" style="margin-top:8px">Б — баттлов, В — победы, Н — ничьи, П — поражения, ЗБ — забито, ПР — пропущено. Победа = 2 очка, ничья = 1 очко</div>`;
+      <div class="text-xs text-muted" style="margin-top:8px">Б — батлов, В — победы, Н — ничьи, П — поражения, ЗБ — забито, ПР — пропущено. Победа = 2 очка, ничья = 1 очко</div>`;
     }
 
     /* ── Leaderboard ── */
@@ -741,6 +833,7 @@
             <span><strong>${escHtml(t.name)}</strong> <span class="text-muted">(${escHtml(t.short_name)})</span></span>
           </div>
           <div class="flex gap-8">
+            <button class="btn btn-ghost btn-sm" onclick="editTeamModal(${t.id}, '${escHtml(t.name)}', '${escHtml(t.short_name)}')" title="Редактировать команду">✏️</button>
             <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0" title="Загрузить логотип">📷<input type="file" accept="image/*" style="display:none" onchange="uploadLogo(${t.id},this)"></label>
             <button class="btn btn-ghost btn-sm" style="color:var(--danger);border:none" onclick="delTeam(${t.id})">✕</button>
           </div>
@@ -783,8 +876,18 @@
     }
 
     async function delTeam(id) {
-      try { await API.del(`/api/teams/${id}`); showToast("Удалено"); loadAll(); }
-      catch (e) { showToast(e.message, true); }
+      const team = teams.find(t => t.id === id);
+      const teamName = team ? team.name : "эту команду";
+      
+      if (!confirm(`Вы действительно хотите удалить команду «${teamName}»?\n\nВнимание: если у команды есть матчи, база данных заблокирует удаление.`)) return;
+      
+      try { 
+        await API.del(`/api/teams/${id}`); 
+        showToast("Команда удалена"); 
+        loadAll(); 
+      } catch (e) { 
+        showToast(e.message, true); 
+      }
     }
 
     /* ── Players management ── */
@@ -802,7 +905,10 @@
           ${tp.length === 0 ? '<div class="text-xs text-muted" style="margin-left:8px">Нет игроков</div>' :
             tp.map(p => `<div class="flex items-center justify-between" style="padding:3px 8px;font-size:13px">
               <span style="cursor:pointer" onclick="openPlayerCard(${p.id})">${p.number != null ? '<span class="badge badge-pitch" style="margin-right:6px">#'+p.number+'</span>' : ''}${escHtml(p.full_name)}</span>
-              ${canManage ? `<button onclick="delPlayer(${p.id})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px">✕</button>` : ''}
+              <div class="flex gap-4 items-center">
+                ${canManage ? `<button class="btn btn-ghost btn-sm" style="padding:0 4px;font-size:12px" onclick="editPlayerModal(${p.id}, '${escHtml(p.full_name)}', ${p.number !== null ? p.number : 'null'})" title="Редактировать игрока">✏️</button>` : ''}
+                ${canManage ? `<button onclick="delPlayer(${p.id})" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px">✕</button>` : ''}
+              </div>
             </div>`).join("")}
         </div>`;
       }).join("");
@@ -947,7 +1053,7 @@
 
     async function exportImage(type) {
       showToast("Генерация картинки...");
-      const labels = { standings: "Турнирная таблица", crosstable: "Шахматка", gk: "Баттл вратарей", scorers: "Бомбардиры", assists: "Ассистенты" };
+      const labels = { standings: "Турнирная таблица", crosstable: "Шахматка", gk: "Батл вратарей", scorers: "Бомбардиры", assists: "Ассистенты" };
       const container = document.createElement("div");
       container.style.cssText = "position:fixed;left:-9999px;top:0;padding:24px;background:#fff;color:#1a1a1a;font-family:Inter,-apple-system,sans-serif;font-size:14px;min-width:600px;max-width:800px;";
       // Header
