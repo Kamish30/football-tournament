@@ -9,13 +9,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 # Получаем DATABASE_URL из окружения. Если не задан, используем папку DATA_DIR, если она есть
-data_dir = os.getenv("DATA_DIR", ".")
-default_db = f"sqlite:///{os.path.join(data_dir, 'tournament.db')}"
 DATABASE_URL = os.getenv("DATABASE_URL", default_db)
+TURSO_TOKEN = os.getenv("TURSO_TOKEN", "")
 
-# Настройка engine для Turso (libsql) или обычного SQLite
 if "libsql" in DATABASE_URL:
-    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"auth_token": TURSO_TOKEN, "check_same_thread": False}
+    )
 else:
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
