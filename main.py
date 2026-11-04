@@ -1071,10 +1071,12 @@ def download_backup(me=Depends(get_current_user)):
         raise HTTPException(403, "Только администратор может скачать бэкап")
     import shutil
     import os
-    # Путь к локальной бд или временному файлу
-    db_file = "tournament.db"
+    data_dir = os.getenv("DATA_DIR", ".")
+    db_file = os.path.join(data_dir, "tournament.db")
     if not os.path.exists(db_file):
-        raise HTTPException(404, "Локальный файл бд не найден (приложение работает в облаке Turso)")
+        db_file = "tournament.db"
+    if not os.path.exists(db_file):
+        raise HTTPException(404, "Локальный файл БД не найден (приложение работает в облаке Turso)")
 
     backup_path = db_file + ".backup"
     shutil.copy2(db_file, backup_path)

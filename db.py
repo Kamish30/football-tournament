@@ -8,11 +8,38 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-# Получаем DATABASE_URL из окружения. Если не задан, используем папку DATA_DIR, если она есть
-DATABASE_URL = os.getenv("DATABASE_URL", default_db)
-TURSO_TOKEN = os.getenv("TURSO_TOKEN", "")
+# 1. Формируем путь к постоянному диску TimeWeb (/app/data/tournament.db)
+data_dir = os.getenv("DATA_DIR", ".")
+if data_dir != "." and not os.path.exists(data_dir):
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+    except Exception:
+        pass
 
-if "libsql" in DATABASE_URL:
+default_db = f"sqlite:///{os.path.join(data_dir, 'tournament.db')}"
+
+# 2. Читаем переменные окружения
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip() or default_db
+TURSO_TOKEN = os.getenv("TURSO_TOKEN", "").strip()
+
+# 3. Безопасная настройка подключения (Turso или локальный диск TimeWeb)
+if "libsql" in DATABASE_URL or "turso.io" in DATABASE_URL:
+    # Если токен был зашит прямо в URL (?authToken=...), аккуратно извлекаем его
+    if "authToken=" in DATABASE_URL:
+        base_part, query_part = DATABASE_URL.split("?", 1)
+        for param in query_part.split("&"):
+            if param.startswith("authToken=") and not TURSO_TOKEN:
+                TURSO_TOKEN = param.split("=", 1)[1]
+        DATABASE_URL = base_part
+
+    # Приводим префикс к стандарту sqlalchemy-libsql
+    if DATABASE_URL.startswith("libsql://"):
+        DATABASE_URL = DATABASE_URL.replace("libsql://", "sqlite+libsql://", 1)
+
+    # Добавляем обязательный флаг secure=true для облачного подключения
+    if "?secure=true" not in DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.rstrip("/") + "?secure=true"
+
     engine = create_engine(
         DATABASE_URL,
         connect_args={"auth_token": TURSO_TOKEN, "check_same_thread": False}
