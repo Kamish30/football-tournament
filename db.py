@@ -1,67 +1,24 @@
 """Database models and session management."""
 
 import os
-from datetime import datetime
-from sqlalchemy import (
-    create_engine, Column, Integer, String, DateTime, ForeignKey,
-    CheckConstraint, Index, Text, event, text
-)
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-# 1. Формируем путь к постоянному диску TimeWeb (/app/data/tournament.db)
-data_dir = os.getenv("DATA_DIR", ".")
-if data_dir != "." and not os.path.exists(data_dir):
-    try:
-        os.makedirs(data_dir, exist_ok=True)
-    except Exception:
-        pass
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-default_db = f"sqlite:///{os.path.join(data_dir, 'tournament.db')}"
+# Если переменная не найдена, на всякий случай оставляем локальный SQLite для тестов
+if not DATABASE_URL:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'tournament.db')}"
 
-# 2. Читаем переменные окружения
-DATABASE_URL = os.getenv("DATABASE_URL", "").strip() or default_db
-TURSO_TOKEN = os.getenv("TURSO_TOKEN", "").strip()
-
-# 3. Безопасная настройка подключения (Turso или локальный диск TimeWeb)
-if "libsql" in DATABASE_URL or "turso.io" in DATABASE_URL:
-    # Если токен был зашит прямо в URL (?authToken=...), аккуратно извлекаем его
-    if "authToken=" in DATABASE_URL:
-        base_part, query_part = DATABASE_URL.split("?", 1)
-        for param in query_part.split("&"):
-            if param.startswith("authToken=") and not TURSO_TOKEN:
-                TURSO_TOKEN = param.split("=", 1)[1]
-        DATABASE_URL = base_part
-
-    # Приводим префикс к стандарту sqlalchemy-libsql
-    if DATABASE_URL.startswith("libsql://"):
-        DATABASE_URL = DATABASE_URL.replace("libsql://", "sqlite+libsql://", 1)
-
-    # Добавляем обязательный флаг secure=true для облачного подключения
-    if "?secure=true" not in DATABASE_URL:
-        DATABASE_URL = DATABASE_URL.rstrip("/") + "?secure=true"
-
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={"auth_token": TURSO_TOKEN, "check_same_thread": False}
-    )
-else:
+# Создаем движок SQLAlchemy для Postgres
+if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-
-# Enable WAL mode only for local sqlite files
-@event.listens_for(engine, "connect")
-def set_sqlite_pragma(dbapi_conn, connection_record):
-    if "libsql" not in str(engine.url) and not str(engine.url).startswith("sqlite:///:memory:"):
-        try:
-            cursor = dbapi_conn.cursor()
-            cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute("PRAGMA busy_timeout=5000")
-            cursor.close()
-        except Exception:
-            pass
+else:
+    engine = create_engine(DATABASE_URL)
 
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
-
 
 def get_db():
     db = SessionLocal()
