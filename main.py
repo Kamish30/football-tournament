@@ -214,6 +214,28 @@ def create_group(data: GroupCreate, db: Session = Depends(get_db), me=Depends(ge
     db.refresh(g)
     return {"id": g.id, "name": g.name, "birth_year": g.birth_year}
 
+
+class GroupUpdateSchema(BaseModel):
+    name: str | None = None
+    birth_year: int | None = None
+
+@app.put("/api/groups/{group_id}")
+def update_group(group_id: int, data: GroupUpdateSchema, db: Session = Depends(get_db), me=Depends(get_current_user)):
+    if me["role"] not in ("admin", "editor"):
+        raise HTTPException(403, "Нет доступа")
+    g = db.query(Group).get(group_id)
+    if not g:
+        raise HTTPException(404, "Группа не найдена")
+    if data.birth_year is not None and data.birth_year != g.birth_year:
+        existing = db.query(Group).filter_by(birth_year=data.birth_year).first()
+        if existing:
+            raise HTTPException(400, f"Группа с годом рождения {data.birth_year} уже существует")
+        g.birth_year = data.birth_year
+    if data.name is not None:
+        g.name = data.name.strip()
+    db.commit()
+    return {"id": g.id, "name": g.name, "birth_year": g.birth_year}
+
 @app.delete("/api/groups/{group_id}")
 def delete_group(group_id: int, db: Session = Depends(get_db), me=Depends(get_current_user)):
     g = db.query(Group).get(group_id)
@@ -1062,7 +1084,7 @@ def search_players(q: str = "", db: Session = Depends(get_db)):
         "group_name": p.team.group.name, "group_id": p.team.group.id,
     } for p in results]
 
-#
+
 # ── Database Backup ──────────────────────────────────────────
 
 @app.get("/api/backup")

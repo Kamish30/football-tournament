@@ -19,10 +19,11 @@
 
 <div class="container">
     <!-- Title bar -->
-    <div class="flex items-center gap-12 mb-16 flex-wrap">
-      <a href="/" class="btn btn-ghost btn-sm" style="text-decoration:none">← Назад</a>
-      <div style="flex:1; min-width: 200px;">
-        <h2 id="group-title" style="font-size:20px;font-weight:800;margin:0"></h2>
+    <div style="flex:1; min-width: 200px;">
+        <div class="flex items-center gap-8">
+          <h2 id="group-title" style="font-size:20px;font-weight:800;margin:0"></h2>
+          <button id="edit-group-btn" class="btn btn-ghost btn-sm hidden" onclick="editGroupModal()" title="Редактировать группу" style="padding:2px 6px">✏️</button>
+        </div>
         <span id="group-subtitle" class="text-sm text-muted"></span>
       </div>
       
@@ -139,7 +140,57 @@
 
   <script src="/static/app.js"></script>
   <script>
-    // Модальное окно редактирования команды
+    // Модальное окно редактирования группы
+    function editGroupModal() {
+      let overlay = document.getElementById("edit-group-modal");
+      if (overlay) overlay.remove();
+
+      overlay = document.createElement("div");
+      overlay.id = "edit-group-modal";
+      overlay.className = "modal-overlay";
+      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+      overlay.innerHTML = `
+        <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+          <div class="modal-header">
+            <h3>Редактировать группу</h3>
+            <button class="modal-close" onclick="document.getElementById('edit-group-modal').remove()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group" style="margin-bottom:12px">
+              <label>Название группы</label>
+              <input class="input" id="eg-name" value="${escHtml(groupInfo.name)}">
+            </div>
+            <div class="form-group" style="margin-bottom:16px">
+              <label>Год рождения</label>
+              <input class="input" id="eg-year" type="number" value="${groupInfo.birthYear}">
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn btn-ghost" onclick="document.getElementById('edit-group-modal').remove()">Отмена</button>
+              <button class="btn btn-primary" onclick="saveGroup()">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+    }
+
+    async function saveGroup() {
+      const name = document.getElementById("eg-name").value.trim();
+      const birth_year = parseInt(document.getElementById("eg-year").value);
+      if (!name || isNaN(birth_year)) return showToast("Заполните название и год рождения", true);
+      try {
+        const oldYear = groupInfo.birthYear;
+        await API.put(`/api/groups/${GROUP_ID}`, { name, birth_year });
+        document.getElementById("edit-group-modal").remove();
+        showToast("Группа обновлена");
+        // Если изменился год рождения, а в URL был указан старый год — перенаправляем на новый URL
+        if (window.location.pathname === `/group/${oldYear}` && oldYear !== birth_year) {
+          window.location.href = `/group/${birth_year}`;
+        } else {
+          loadAll();
+        }
+      } catch (e) { showToast(e.message, true); }
+    }
     function editTeamModal(teamId, currentName, currentShort) {
       let overlay = document.getElementById("edit-team-modal");
       if (overlay) overlay.remove();
@@ -1124,7 +1175,7 @@
         link.download = `${type}_${groupInfo.name}.png`;
         link.href = canvas.toDataURL("image/png");
         link.click();
-        showToast("Картинка скачана!");
+        showToast("Готово!");
       } catch (e) {
         if (container.parentNode) document.body.removeChild(container);
         showToast("Ошибка генерации: " + e.message, true);
@@ -1140,7 +1191,10 @@
         
         // Удален битый код, обращавшийся к несуществующему id="admin-btns"
         // Кнопки редактора уже корректно показываются через initEditorControls() в app.js
-        
+        if (role === "admin" || role === "editor") {
+          const egb = document.getElementById("edit-group-btn");
+          if (egb) egb.classList.remove("hidden");
+        }
         if (role === "coach") {
           try {
             coachTeamIds = await API.get("/api/users/me/teams") || [];
